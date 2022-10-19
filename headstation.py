@@ -11,11 +11,15 @@ class Headstation():
     bus: can.interface.Bus = None
     running: bool = False
     nodes_sensors_calibration_data: dict = None  # has to be set before looping
+    tick_rate = None
+    __last_alive = 0
+    node_id = 1 # headstation id should always be 1
 
-    def __init__(self, bus, start_looping: bool = True, nodes_sensors_calibration_data={}):
+    def __init__(self, bus, start_looping: bool = True, nodes_sensors_calibration_data={}, tick_rate=30):
         self.bus = bus
         self.connected_clients = {}
         self.nodes_sensors_calibration_data = nodes_sensors_calibration_data
+        self.tick_rate = tick_rate
         if start_looping:
             self.loop()
 
@@ -23,6 +27,13 @@ class Headstation():
         msg = can.Message(arbitration_id=arbitration_id, data=bytes)
         self.bus.send(msg)
         return msg
+
+    def send_alive_packet(self):
+        print('[ HEAD ] sending ALIVE packet')
+        self.__last_alive = time()
+        arbit_id = 100
+        bytes = [3, *number_to_bytes(self.node_id, 2)]
+        return self.send_packet(arbitration_id=arbit_id, bytes=bytes)
 
     def handle_node_entry(self, node_id: int):
         if node_id in self.connected_clients:
@@ -157,6 +168,8 @@ class Headstation():
         self.running = True
         print("[ HEAD ] starting to loop")
         while self.running:
+            if time()-self.__last_alive >= self.tick_rate:
+                self.send_alive_packet()
             msg = self.bus.recv(timeout=100)
             if msg is not None:
                 self.parse_packet(msg.data)
