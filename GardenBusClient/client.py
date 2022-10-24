@@ -17,6 +17,7 @@ class GardenBusClient():
     # as well as other periodically timed packets (in seconds)
     running = False
     __last_alive = 0
+    last_headstation_alive = None
 
     def __init__(self, bus: can.interface.Bus, node_id: int, tick_rate: float = 30, start_looping: bool = True, print_tick_rate=True):
         self.bus = bus
@@ -25,7 +26,7 @@ class GardenBusClient():
         if print_tick_rate:
             print("[ {node_id} ] Initializing (tick rate: {tick_rate}s)".format(
                 node_id=node_id, tick_rate=tick_rate))
-
+        self.last_headstation_alive = time()
         if start_looping:
             self.loop()
 
@@ -192,12 +193,20 @@ class GardenBusClient():
         while self.running:
             if time()-self.__last_alive >= self.tick_rate:  # if the last alive-packet is more than the tickrate ago
                 self.send_alive_packet()
+            if time()-self.last_headstation_alive >= config.HEADSTATION_TICK_RATE:  # if the last alive-packet is more than the tickrate ago
+                print("[ {node_id} ] Headstation timeout detected!".format(node_id=self.node_id))
+
             msg = self.bus.recv(timeout=1)  # wait for 1 second
             if msg is not None:  # handle message if one has been received
                 if msg.data[0] == config.VALUE_REQUEST and utils.bytes_to_number(msg.data[1:3]) == self.node_id:
                     sensor_slot = utils.byte_to_number(msg.data[3])
                     self.handle_value_request(sensor_slot)
+                elif msg.data[0] == config.ALIVE_PACKET:
+                    node_id = utils.bytes_to_number(msg.data[1:3])
+                    if node_id == config.HEADSTATION_NODE_ID:
+                        print("[ {node_id} ] headstation is still connected".format(node_id=self.node_id))
 
+                        self.last_headstation_alive = time()
                 #print(str(self.node_id), "received a packet:", msg.data[0])
 
         print("[ {node_id} ] Goodbye".format(node_id=self.node_id))
