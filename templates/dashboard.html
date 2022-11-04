@@ -7,7 +7,9 @@
     <title>Dashboard</title>
 </head>
 <body>
-    <h1>Hello you are logged in</h1>
+    <h1>Hello {{username}} </h1>
+
+    <a href="{{url_for('stations')}}">Stations</a>
     <a href="{{url_for('logout')}}">Log out</a>
 </body>
 </html>
