@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=, initial-scale=1.0">
+    <title>Stations</title>
+</head>
+<body>
+    <h1>Stations</h1>
+    <form method="POST" action="{{url_for('register')}}">
+        {{form.hidden_tag()}}
+        {{form.station_name}}
+        {{form.latitude}}
+        {{form.longitude}}
+        {{form.height}}
+    </form>
+</body>
+</html>
