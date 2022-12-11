@@ -1,19 +1,156 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=, initial-scale=1.0">
     <title>Stations</title>
+    <style>
+        .collapsible {
+            background-color: #777;
+            color: white;
+            cursor: pointer;
+            padding: 18px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-size: 15px;
+        }
+
+        .active,
+        .collapsible:hover {
+            background-color: #555;
+        }
+
+        .content {
+            padding: 0 18px;
+            display: none;
+            overflow: hidden;
+            background-color: #f1f1f1;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap: wrap
+        }
+
+        .flex-item {
+            background: tomato;
+            padding: 5px;
+            margin: 5px;
+
+            line-height: 50px;
+            color: white;
+            font-weight: bold;
+            font-size: 2em;
+            text-align: center;
+        }
+
+        input[type=text],
+        select {
+            width: 100%;
+            padding: 12px 20px;
+            margin: 8px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        input[type=submit] {
+            width: 100%;
+            background-color: #4CAF50;
+            color: white;
+            padding: 14px 20px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        input[type=submit]:hover {
+            background-color: #45a049;
+        }
+
+        a.fill-div {
+            display: block;
+            height: 100%;
+            width: 100%;
+            text-decoration: none;
+        }
+    </style>
 </head>
+
 <body>
+    <a href="{{url_for('dashboard')}}">Return to dashboard</a>
     <h1>Stations</h1>
-    <form method="POST" action="{{url_for('register')}}">
-        {{form.hidden_tag()}}
-        {{form.station_name}}
-        {{form.latitude}}
-        {{form.longitude}}
-        {{form.height}}
-    </form>
+    <button type="button" class="collapsible">Create a new station</button>
+    <div class="content">
+        <div class="form_container" style="display: flex; flex-direction: column">
+            <form method="POST" action="">
+                {{form.hidden_tag()}}
+                <label for="station_name">Station name:</label>
+                {{form.station_name}}
+                <label for="latitude">Latitude:</label>
+                {{form.latitude}}
+                <label for="longitude">Longitude:</label>
+                {{form.longitude}}
+                <label for="height">Height:</label>
+                {{form.height}}
+                {{form.submit}}
+            </form>
+        </div>
+    </div>
+    <h2>Your stations:</h2>
+
+    <div class="container">
+        <br>
+        {% for station in own_stations %}
+        <a href="{{url_for('update_station',id=station.id)}}" class="fill-div">
+            <div class="flex-item">
+                <div>{{station.station_name}}</div>
+                {% if station.id in sensor_count_of_stations %}
+                    <div>{{sensor_count_of_stations[station.id]["count"]}} sensor{% if sensor_count_of_stations[station.id]["count"]>1 %}s{% endif %} </div>
+                {% else %}
+                    <div>no sensors</div>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    <h2>Other stations:</h2>
+    <div class="container">
+        <br>
+        {% for station in other_stations %}
+        <div class="flex-item">
+            <div>{{station.station_name}}</div>
+            <div>{{user_dict[station.belongs_to_user_id]}}</div>
+            {% if station.id in sensor_count_of_stations %}
+                <div>{{sensor_count_of_stations[station.id]["count"]}} sensor{% if sensor_count_of_stations[station.id]["count"]>1 %}s{% endif %}</div>
+            {% else %}
+                <div>no sensors</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    <script>
+        var coll = document.getElementsByClassName("collapsible");
+        var i;
+
+        for (i = 0; i < coll.length; i++) {
+            coll[i].addEventListener("click", function () {
+                this.classList.toggle("active");
+                var content = this.nextElementSibling;
+                if (content.style.display === "block") {
+                    content.style.display = "none";
+                } else {
+                    content.style.display = "block";
+                }
+            });
+        }
+    </script>
 </body>
+
 </html>

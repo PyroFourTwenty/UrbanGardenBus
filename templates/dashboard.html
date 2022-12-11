@@ -11,5 +11,13 @@
 
     <a href="{{url_for('stations')}}">Stations</a>
     <a href="{{url_for('logout')}}">Log out</a>
+    <h3>
+        {{data["name"]}}
+    </h3>
+    {% for sensor in data["sensors"] %}
+    <div>
+        {{sensor["title"]}} : {{sensor["lastMeasurement"]["value"]}} {{sensor["unit"]}}
+    </div>
+    {% endfor %}
 </body>
 </html>

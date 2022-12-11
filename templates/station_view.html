@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{station.station_name}}</title>
+    <style>
+        .collapsible {
+            background-color: #777;
+            color: white;
+            cursor: pointer;
+            padding: 18px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-size: 15px;
+            transition-duration: 2s;
+            transition-property: display;
+        }
+
+        .active,
+        .collapsible:hover {
+            background-color: #555;
+            display: block;
+        }
+
+        .content {
+            padding: 0 18px;
+            display: none;
+            overflow: hidden;
+            background-color: #f1f1f1;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap: wrap
+        }
+
+        .flex-item {
+            background: tomato;
+            padding: 5px;
+            margin: 5px;
+
+            line-height: 50px;
+            color: white;
+            font-weight: bold;
+            font-size: 2em;
+            text-align: center;
+        }
+
+        input[type=text],
+        input[type=number],
+        select {
+            width: 100%;
+            padding: 12px 20px;
+            margin: 8px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        input[type=submit] {
+            width: 100%;
+            background-color: #4CAF50;
+            color: white;
+            padding: 14px 20px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        input[type=submit]:hover {
+            background-color: #45a049;
+        }
+
+        .delete {
+            width: 100%;
+            background-color: #e71c1c;
+            color: white;
+            padding: 14px 20px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .delete:hover {
+            background-color: #ab4545;
+        }
+
+        .sensorTableSlotColumm {
+            text-align: center;
+        }
+        #add-sensor-submit{
+            transition: background-color 0.5s ease;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="collapsible" type="button" class="collapsible">Edit or delete {{station.station_name}}</button>
+
+    <div class="content">
+
+        <div class="form_container" style="display: flex; flex-direction: column">
+            <h1>Station meta data</h1>
+            <form method="POST" action="">
+                {{form.hidden_tag()}}
+                <label for="station_name">Station name:</label>
+                {{form.station_name}}
+                <label for="latitude">Latitude:</label>
+                {{form.latitude}}
+                <label for="longitude">Longitude:</label>
+                {{form.longitude}}
+                <label for="height">Height:</label>
+                {{form.height}}
+                {{form.submit}}
+            </form>
+            <form action="{{url_for('delete_station', id=station.id)}}"
+                onsubmit="return confirm('Are you sure you want to delete {{station.station_name}} and all its sensors?');">
+                <button class='delete' type="submit">Delete this station</button>
+            </form>
+            <h1>Sensors</h1>
+            <form method="POST" action="{{url_for('add_sensor_to_station', station_id=station.id)}}">
+                {{sensor_form.hidden_tag()}}
+                <label for="sensor_type">Sensor type:</label>
+                {{sensor_form.sensor_type}}
+                <label for="slot">Slot:</label>
+                {{sensor_form.slot}}
+                {{sensor_form.submit}}
+            </form>
+
+            {% if sensors|length == 0 %}
+            <h2>No sensors added yet</h2>
+            {% else %}
+            <table>
+                <th>Sensor model</th>
+                <th>Slot</th>
+                <th></th>
+                {% for sensor in sensors %}
+                <tr>
+                    <td>
+                        {{ sensor[1] }}
+                    </td>
+                    <td class="sensorTableSlotColumm">
+                        {{ sensor[0] }}
+                    </td>
+                    <td>
+                        <form method="POST"
+                            action="{{url_for('delete_sensor', station_id=station.id, slot=sensor[0])}}"
+                            onsubmit="return confirm('Are you sure you want to delete {{sensor[1]}} on slot {{sensor[0]}}?');">
+                            <button class="delete" type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </table>
+            
+            {% endif %}
+        </div>
+    </div>
+    <iframe id="map-iframe"  src="{{url_for('map')}}" width="100%" height="700px"   frameBorder="0"></iframe>
+    <script>
+        let extendCollapsible = {{extend_collapsible}}
+        console.log("extendCollapsible: ")
+        console.log(extendCollapsible)
+        let slotInput = document.getElementById('slot')
+        let blockedSlots = {{ blocked_slots_for_station }}
+        for (let i = 0; i < 255; i++) {
+            if (!blockedSlots.includes(i)) {
+                slotInput.value = i;
+                break;
+            }
+        }
+        slotInput.onchange = function () {
+            submitButton = document.getElementById("add-sensor-submit");
+            if (blockedSlots.includes(parseInt(slotInput.value))) {
+                slotInput.style = "border:1px solid red;"
+                submitButton.disabled=true;
+                submitButton.style="background-color: #e71c1c;";
+                submitButton.value = "Slot unavailable"
+                
+            } else {
+                submitButton.disabled=false;
+                slotInput.style = "border: 1px solid white;"
+                submitButton.style="background-color: #4CAF50;";
+                submitButton.value = "Add sensor"
+            }
+        }
+        let collapsible = document.getElementById("collapsible")
+        function toggleCollapsible() {
+            collapsible.classList.toggle("active");
+            var content = collapsible.nextElementSibling;
+            if (content.style.display === "block") {
+                content.style.display = "none";
+                console.log("height: "+(collapsible.offsetHeight+content.offsetHeight))
+            } else {
+                content.style.display = "block";
+                console.log("height: "+(collapsible.offsetHeight+content.offsetHeight))
+
+            }
+        }
+        collapsible.addEventListener("click", toggleCollapsible)
+
+        if (performance.navigation.type == performance.navigation.TYPE_RELOAD) {
+            console.info("This page is reloaded");
+            toggleCollapsible();
+        } else {
+            toggleCollapsible();
+            console.info("This page is not reloaded");
+        }
+
+        //Keep scroll position between reloads
+        document.addEventListener("DOMContentLoaded", function(event) { 
+            var scrollpos = localStorage.getItem('scrollpos');
+            if (scrollpos) window.scrollTo(0, scrollpos);
+        });
+
+        window.onbeforeunload = function(e) {
+            localStorage.setItem('scrollpos', window.scrollY);
+        };
+    </script>
+</body>
+
+</html>
