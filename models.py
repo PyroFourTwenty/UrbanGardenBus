@@ -13,8 +13,9 @@ class Station(db.Model):
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
     height = db.Column(db.Float)
-    
+
 class Sensor(db.Model):
     id = db.Column(db.Integer, primary_key = True)
     belongs_to_station_id = db.Column(db.Integer, nullable=False)
     sensor_model_id = db.Column(db.Integer, nullable=False)
+    station_slot = db.Column(db.Integer, nullable=False)
