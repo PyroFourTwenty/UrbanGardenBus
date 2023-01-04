@@ -11,7 +11,7 @@ class Headstation():
     bus: can.interface.Bus = None
     running: bool = False
     nodes_sensors_calibration_data: dict = None  # has to be set before looping
-    tick_rate = None
+    tick_rate:float = None
     __last_alive = 0
     node_id = 1 # headstation id should always be 1
 
@@ -19,7 +19,7 @@ class Headstation():
         self.bus = bus
         self.connected_clients = {}
         self.nodes_sensors_calibration_data = nodes_sensors_calibration_data
-        self.tick_rate = tick_rate
+        self.tick_rate = float(tick_rate)
         if start_looping:
             self.loop()
 
@@ -29,7 +29,7 @@ class Headstation():
         return msg
 
     def send_alive_packet(self):
-        print('[ HEAD ] sending ALIVE packet')
+        print('[ HEAD ] sending ALIVE packet @',time())
         self.__last_alive = time()
         arbit_id = 100
         bytes = [3, *number_to_bytes(self.node_id, 2)]
@@ -170,7 +170,7 @@ class Headstation():
         while self.running:
             if time()-self.__last_alive >= self.tick_rate:
                 self.send_alive_packet()
-            msg = self.bus.recv(timeout=100)
+            msg = self.bus.recv(timeout=.1)
             if msg is not None:
                 self.parse_packet(msg.data)
         print("[ HEAD ] ending service loop, waiting for {count} clients to disconnect".format(
