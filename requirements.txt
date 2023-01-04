@@ -1,9 +1,10 @@
 python-can
 numpy
-
+folium
 flask
 flask_sqlalchemy
 flask_login
+bcrypt<4.0.0
 flask_bcrypt
 flask_wtf
 wtforms
