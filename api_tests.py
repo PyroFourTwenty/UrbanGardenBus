@@ -1,22 +1,25 @@
-import requests
-import json
 import random
 import jinja2
 from ApiAccess.OsemAccess import OsemAccess
 from ApiAccess.TtnAccess import TtnAccess
 
 
+from rak811_selfmade import RAK811
+import numpy as np
+def get_value_as_hex(value):
+    return np.float32(value).tobytes().hex()
+
 def do_process():
-    ttn_full_acc_key ="full-acc-key-here"
+    ttn_full_acc_key ="ttn-key-here"
     ttn_username = 'ttn-username-here'
     osem_mail = "osem-mail-here"
-    osem_pw = "osem-pw-here"    
+    osem_pw = "osem-password-here"    
     s = """
         function decodeUplink(input) {
             return {
                 data: {
                     {% for element in elements %}
-                    "{{element}}": bytesToFloat(input.bytes.slice({{loop.index0*4}}, {{loop.index0*4+3}})).toFixed(2),
+                    "{{element}}": bytesToFloat(input.bytes.slice({{loop.index0*4}}, {{loop.index0*4+4}})).toFixed(2),
                     {% endfor %}
 
                 },
@@ -37,19 +40,21 @@ def do_process():
         }
     """
 
+
     ttn = TtnAccess(full_account_key=ttn_full_acc_key,
         username=ttn_username
     )
     app_id = "delete-me"+str(random.randint(0,999))
     print('creating new app:',ttn.create_new_ttn_app(app_id=app_id,app_description="nothing interesting to see here i guess", app_name="a whole new world"))
     dev_eui = ttn.generate_random_dev_eui()
+
     dev_id = "a-python-created-device"+str(random.randint(0,999))
-    while(ttn.create_new_ttn_enddevice(join_eui="1111111111111111", dev_eui=dev_eui, dev_id=dev_id, app_id=app_id)!=200):
+    app_key = ttn.generate_random_dev_eui(16)
+    join_eui = '1111111111111111'
+    while(ttn.create_new_ttn_enddevice(join_eui="1111111111111111", dev_eui=dev_eui, dev_id=dev_id, app_id=app_id, app_key=app_key)!=200):
         print('creating enddevice ',dev_id)
         dev_eui = ttn.generate_random_dev_eui()
-        #print('creating new enddevice',ttn.create_new_ttn_enddevice(join_eui="1111111111111111", dev_eui=dev_eui, dev_id=dev_id, app_id=app_id))
     print('created enddevice ',dev_id)
-    
     
     
     osem_access = OsemAccess(osem_mail,osem_pw)
@@ -76,14 +81,25 @@ def do_process():
                     sensor_type='DHT22',
                     unit='%')
                 if put_sensor_result[0]==200:
-            
-
+                    
+                    print('creating webhook in ttn', ttn.add_webhook_to_ttn_app(app_id=app_id, webhook_id='super-eindeutige-id'))
+                    
                     print("Put new sensor and got id", put_sensor_result[1])
                     sensor_ids = osem_access.get_sensor_ids_of_sensebox(sensebox_id= post_result[1])
                     ttn.create_new_ttn_enddevice_formatter(dev_id=dev_id, payload_formatter_js=jinja2.Template(s).render(elements=sensor_ids), application_id=app_id)
+                    
+                    rak811 = RAK811('/dev/ttyUSB0')
+                    payload = ''.join([str(hex(b)).replace('0x','') for b in np.float32(12.34).tobytes()])
+                    payload+=  ''.join([str(hex(b)).replace('0x','') for b in np.float32(56.78).tobytes()])
+                    
+                    rak811.send_lorawan_message(message=payload,
+                        region='EU868',
+                        app_eui=join_eui,
+                        app_key=app_key,
+                        dev_eui=dev_eui
+                    )
                     #print('deleting created enddevice',ttn.delete_ttn_enddevice_from_app(app_id=app_id, dev_id=dev_id))
                     #print('deleting created ttn app',ttn.delete_ttn_app(app_id=app_id))
-
             else:
                 print('Failed to put new sensor with status code', put_sensor_result[0])
 
