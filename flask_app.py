@@ -1,8 +1,8 @@
 from flask import Flask, render_template, redirect, url_for, request, Response
 from flask_login import login_user, LoginManager, login_required, logout_user, current_user
-from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation
+from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation, CreateNewSensorModelForm
 from GardenBusClient.SupportedSensors import supported_sensors
-from models import User, Station, Sensor
+from models import User, Station, Sensor, SensorModel
 from database import db
 from flask_bcrypt import Bcrypt
 import folium
@@ -144,6 +144,19 @@ def stations():
                             other_stations=other_stations, 
                             user_dict=user_dict,
                             sensor_count_of_stations=sensor_count_of_stations)
+
+
+@app.route('/sensormodel',methods=['GET','POST'])
+@login_required
+def sensor_model():
+    form = CreateNewSensorModelForm()
+    if form.validate_on_submit():
+        new_sensor_model = SensorModel(model_name=form.model_name.data, phenomenon_name=form.phenomenon_name.data,unit_name=form.unit_name.data)
+        db.session.add(new_sensor_model)
+        db.session.commit()
+        return Response("Sensor model created", 201)
+    
+    return render_template('sensor_model_creation.html',form=form)
 
 @app.route('/station/<id>',methods=['GET','POST'])
 @login_required
