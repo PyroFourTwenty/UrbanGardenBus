@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create new sensor model</title>
+</head>
+<body>
+    <h1>Sensor model creation</h1>
+    <div>
+        <form method="POST" action="">
+            {{form.hidden_tag()}}
+            <label for="model_name">Sensor model name:</label>
+            {{form.model_name}}
+            <label for="phenomenon_name">Phenomenon:</label>
+            {{form.phenomenon_name}}
+            <label for="unit_name">Unit:</label>
+            {{form.unit_name}}
+            {{form.submit}}
+        </form>
+    </div>
+
+    <table>
+        <tr>
+            <th>id</th>
+            <th>Sensor model name</th>
+            <th>observed phenomenon</th>
+            <th>unit</th>
+        </tr>
+        {% for sensor_model in available_sensors %}
+        <tr>
+            <td>{{sensor_model.id}}</td>
+            <td>{{sensor_model.model_name}}</td>
+            <td>{{sensor_model.phenomenon_name}}</td>
+            <td>{{sensor_model.unit_name}}</td>
+        </tr>
+
+        {% endfor %}
+    
+    </table>
+
+</body>
+</html>

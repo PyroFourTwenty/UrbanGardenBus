@@ -1,8 +1,8 @@
 from flask import Flask, render_template, redirect, url_for, request, Response
 from flask_login import login_user, LoginManager, login_required, logout_user, current_user
-from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation
+from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation, CreateNewSensorModelForm
 from GardenBusClient.SupportedSensors import supported_sensors
-from models import User, Station, Sensor
+from models import User, Station, Sensor, SensorModel
 from database import db
 from flask_bcrypt import Bcrypt
 import folium
@@ -144,6 +144,37 @@ def stations():
                             other_stations=other_stations, 
                             user_dict=user_dict,
                             sensor_count_of_stations=sensor_count_of_stations)
+
+
+@app.route('/sensormodel',methods=['GET','POST'])
+@login_required
+def sensor_model():
+    form = CreateNewSensorModelForm()
+    if form.validate_on_submit():
+        sensor_model_from_db = SensorModel.query.filter_by(model_name=form.model_name.data, phenomenon_name=form.phenomenon_name.data,unit_name=form.unit_name.data).first()
+        if sensor_model_from_db:
+            print("sensor model combination already exists!")
+            return redirect(url_for("sensor_model"))
+
+        else:
+            print("Sensor model is new or different")
+        new_sensor_model = SensorModel(model_name=form.model_name.data, phenomenon_name=form.phenomenon_name.data,unit_name=form.unit_name.data)
+        db.session.add(new_sensor_model)
+        db.session.commit()
+        return redirect(url_for("sensor_model"))
+    
+    available_sensors=[]
+
+    for sensor_model in SensorModel.query.all():
+        available_sensors.append({
+            "id": sensor_model.id,
+            "model_name" : sensor_model.model_name,
+            "phenomenon_name": sensor_model.phenomenon_name,
+            "unit_name": sensor_model.unit_name
+            }
+        )  
+
+    return render_template('sensor_model_creation.html',form=form, available_sensors=available_sensors)
 
 @app.route('/station/<id>',methods=['GET','POST'])
 @login_required

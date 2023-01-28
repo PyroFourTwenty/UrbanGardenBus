@@ -41,3 +41,9 @@ class AddNewSensorToStation(FlaskForm):
         for sensor in supported_sensors.sensors:
             sensors_from_file.append((sensor,supported_sensors.sensors[sensor]["model_name"]))
         self.sensor_type.choices = sensors_from_file
+
+class CreateNewSensorModelForm(FlaskForm):
+    model_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Name of the sensor model"})
+    phenomenon_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Name of the observed phenomenon (ie. 'temperature'or 'soil humidity'"})
+    unit_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Unit of the measurement (ie. '°C')"})
+    submit = SubmitField("Save sensor model")
