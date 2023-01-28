@@ -19,3 +19,9 @@ class Sensor(db.Model):
     belongs_to_station_id = db.Column(db.Integer, nullable=False)
     sensor_model_id = db.Column(db.Integer, nullable=False)
     station_slot = db.Column(db.Integer, nullable=False)
+
+class SensorModel(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    model_name = db.Column(db.String(256), nullable=False)
+    phenomenon_name = db.Column(db.String(256), nullable=False)
+    unit_name = db.Column(db.String(256), nullable=False)
