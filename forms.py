@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 
-from wtforms import StringField, PasswordField, FloatField, SubmitField, SelectField, IntegerField
+from wtforms import StringField, PasswordField, FloatField, SubmitField, SelectField, IntegerField, BooleanField
 from wtforms.validators import InputRequired,Length,ValidationError,NumberRange
 from GardenBusClient.SupportedSensors import supported_sensors
 from models import User
@@ -37,13 +37,11 @@ class AddNewSensorToStation(FlaskForm):
 
     def __init__(self, *args, **kwargs):
         super(AddNewSensorToStation,self).__init__(*args, **kwargs)
-        sensors_from_file = []
-        for sensor in supported_sensors.sensors:
-            sensors_from_file.append((sensor,supported_sensors.sensors[sensor]["model_name"]))
-        self.sensor_type.choices = sensors_from_file
+
 
 class CreateNewSensorModelForm(FlaskForm):
     model_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Name of the sensor model"})
     phenomenon_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Name of the observed phenomenon (ie. 'temperature'or 'soil humidity'"})
     unit_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Unit of the measurement (ie. '°C')"})
+    calibration_needed = BooleanField(render_kw={"placeholder": "Calibration required for this sensor?"})
     submit = SubmitField("Save sensor model")

@@ -1,8 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, request, Response
 from flask_login import login_user, LoginManager, login_required, logout_user, current_user
 from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation, CreateNewSensorModelForm
-from GardenBusClient.SupportedSensors import supported_sensors
-from models import User, Station, Sensor, SensorModel
+from models import User, Station, Sensor, SensorModel, CalibrationValueForSensor
 from database import db
 from flask_bcrypt import Bcrypt
 import folium
@@ -155,10 +154,12 @@ def sensor_model():
         if sensor_model_from_db:
             print("sensor model combination already exists!")
             return redirect(url_for("sensor_model"))
-
         else:
             print("Sensor model is new or different")
-        new_sensor_model = SensorModel(model_name=form.model_name.data, phenomenon_name=form.phenomenon_name.data,unit_name=form.unit_name.data)
+        new_sensor_model = SensorModel(model_name=form.model_name.data, 
+            phenomenon_name=form.phenomenon_name.data,
+            unit_name=form.unit_name.data,
+            calibration_needed=form.calibration_needed.data)
         db.session.add(new_sensor_model)
         db.session.commit()
         return redirect(url_for("sensor_model"))
@@ -170,7 +171,8 @@ def sensor_model():
             "id": sensor_model.id,
             "model_name" : sensor_model.model_name,
             "phenomenon_name": sensor_model.phenomenon_name,
-            "unit_name": sensor_model.unit_name
+            "unit_name": sensor_model.unit_name,
+            "calibration_needed": sensor_model.calibration_needed
             }
         )  
 
@@ -196,24 +198,65 @@ def update_station(id,extend_collapsible=True):
             db.session.commit()
             #sensors = Sensor.query.filter_by(belongs_to_station_id = id).all()
             #sensors = list(['asd1', 'asd2', 'asd3', 'asd4'])
+        available_sensors = []
+        for sensor_model in SensorModel.query.all():
+            available_sensors.append((sensor_model.id, sensor_model.model_name))
+        
         sensor_form = AddNewSensorToStation()
+        sensor_form.sensor_type.choices = available_sensors
         
         
         sensors_of_station_from_db = Sensor.query.filter_by(belongs_to_station_id = id).all()
 
-        sensor_list_for_form = []
+        sensor_data_for_form = []
         for sensor in sensors_of_station_from_db:
-            sensor_model_name = None
-            for iterated_sensor in supported_sensors.sensors:
-                if sensor.sensor_model_id == supported_sensors.sensors[iterated_sensor]['id']:
-                    sensor_model_name = supported_sensors.sensors[iterated_sensor]['model_name']
-            sensor_list_for_form.append((sensor.station_slot, sensor_model_name))
+            
+            sensor_model = SensorModel.query.filter_by(id = sensor.sensor_model_id).first()
+            sensor_model_name = sensor_model.model_name
+            phenomenon = sensor_model.phenomenon_name
+            calibration_value_row = CalibrationValueForSensor.query.filter_by(belongs_to_sensor_id=sensor.id).first()#.calibration_value
+            calibration_value_for_sensor = None
+            if calibration_value_row:
+                calibration_value_for_sensor = calibration_value_row.calibration_value
+            data = {
+                "sensor_id": sensor.id,
+                "sensor_model_name": sensor_model_name,
+                "sensor_slot": sensor.station_slot,
+                "calibration_needed": sensor_model.calibration_needed,
+                "phenomenon": phenomenon,
+                "calibration_value": calibration_value_for_sensor
+            }
+            sensor_data_for_form.append(data)
+
         blocked_slots_for_station = []
         for sensor in Sensor.query.filter_by(belongs_to_station_id=id):
             blocked_slots_for_station.append(sensor.station_slot)
-        return render_template('station_view.html', form=form, station=station, sensor_form=sensor_form, sensors=sensor_list_for_form, blocked_slots_for_station=json.dumps(blocked_slots_for_station), extend_collapsible=json.dumps(extend_collapsible), map=map())
+        return render_template('station_view.html', form=form, station=station, sensor_form=sensor_form, sensors=sensor_data_for_form, blocked_slots_for_station=json.dumps(blocked_slots_for_station), extend_collapsible=json.dumps(extend_collapsible), map=map())
     else:
         return Response('not yours, sorry',status=403)
+
+@app.route('/sensor/calibrate/<sensor_id>', methods=['POST', 'PUT'])
+@login_required
+def calibrate_sensor(sensor_id):
+    calibration_value = request.form['calibration_value']
+    try:
+        calibration_value = float(calibration_value)
+    except ValueError:
+        return Response("Sumbitted calibration value is not a number", status=400)
+
+    calibration_value_from_db = CalibrationValueForSensor.query.filter_by(belongs_to_sensor_id=sensor_id).first()
+    if calibration_value_from_db:
+        CalibrationValueForSensor.query.filter_by(id=calibration_value_from_db.id).update({
+            "calibration_value":calibration_value
+        })
+        db.session.commit()
+        return Response("Calibration value has been updated", status=204)
+    else:
+        new_calibration_value_row = CalibrationValueForSensor(belongs_to_sensor_id=sensor_id,calibration_value=calibration_value)
+        db.session.add(new_calibration_value_row)
+        db.session.commit()
+        return Response("Calibration value has been created", status=201)
+
 
 @app.route('/station/delete/<id>', methods=['GET'])
 @login_required
@@ -250,7 +293,7 @@ def add_sensor_to_station(station_id):
     if station_belongs_to_current_user:
         new_sensor = Sensor(
             belongs_to_station_id=station_id,
-            sensor_model_id=supported_sensors.sensors[sensor_type]['id'],
+            sensor_model_id=sensor_type,
             station_slot=slot
         )
         db.session.add(new_sensor)
@@ -271,8 +314,10 @@ def delete_sensor(station_id, slot):
     if station_belongs_to_current_user:
         sensor = Sensor.query.filter_by(belongs_to_station_id=station_id, station_slot=slot).first()
         if sensor:
-            #Sensor.__table__.delete().where()
             db.session.query(Sensor).filter(Sensor.belongs_to_station_id==station_id, Sensor.station_slot==slot).delete()
+            calibration_value_for_sensor = CalibrationValueForSensor.query.filter_by(belongs_to_sensor_id=sensor.id).first()
+            if calibration_value_for_sensor:
+                CalibrationValueForSensor.query.filter_by(belongs_to_sensor_id=sensor.id).delete()
             db.session.commit()
             return redirect(url_for('update_station', id=station_id))
         else:

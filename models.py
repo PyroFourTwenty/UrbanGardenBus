@@ -20,8 +20,14 @@ class Sensor(db.Model):
     sensor_model_id = db.Column(db.Integer, nullable=False)
     station_slot = db.Column(db.Integer, nullable=False)
 
+class CalibrationValueForSensor(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    belongs_to_sensor_id = db.Column(db.Integer, nullable=False)
+    calibration_value = db.Column(db.Float, default = 0, nullable=False)
+
 class SensorModel(db.Model):
     id = db.Column(db.Integer, primary_key = True)
     model_name = db.Column(db.String(256), nullable=False)
     phenomenon_name = db.Column(db.String(256), nullable=False)
     unit_name = db.Column(db.String(256), nullable=False)
+    calibration_needed = db.Column(db.Boolean, nullable=False)
