@@ -130,6 +130,8 @@
                 {{sensor_form.hidden_tag()}}
                 <label for="sensor_type">Sensor type:</label>
                 {{sensor_form.sensor_type}}
+                <b>Not finding the sensor you are looking for? <a href="/sensormodel">Create a new sensor model!</a> </b>
+                <br>
                 <label for="slot">Slot:</label>
                 {{sensor_form.slot}}
                 {{sensor_form.submit}}
@@ -141,19 +143,33 @@
             <table>
                 <th>Sensor model</th>
                 <th>Slot</th>
+                <th>Calibration value</th>
+                <th>Phenomenon</th>
                 <th></th>
                 {% for sensor in sensors %}
                 <tr>
                     <td>
-                        {{ sensor[1] }}
+                        {{ sensor["sensor_model_name"] }}
                     </td>
                     <td class="sensorTableSlotColumm">
-                        {{ sensor[0] }}
+                        {{ sensor["sensor_slot"] }}
                     </td>
                     <td>
+                        {% if sensor["calibration_needed"] %}
+                        <form method="POST" 
+                            action="{{url_for('calibrate_sensor', sensor_id=sensor["sensor_id"])}}"
+                            onsubmit="return false;">
+                            <input onfocusout="this.form.submit(); return false;"
+                                onkeypress='javascript: if(event.key==="Enter"){event.preventDefault();this.form.submit();return false;}'    
+                            id="" name="calibration_value" type="number" step="0.01" value='{{ sensor["calibration_value"] }}''>
+                        </form>
+                        {% endif %}
+                    </td>
+                    <td>{{ sensor["phenomenon"] }}</td>
+                    <td>
                         <form method="POST"
-                            action="{{url_for('delete_sensor', station_id=station.id, slot=sensor[0])}}"
-                            onsubmit="return confirm('Are you sure you want to delete {{sensor[1]}} on slot {{sensor[0]}}?');">
+                            action="{{url_for('delete_sensor', station_id=station.id, slot=sensor['sensor_slot'])}}"
+                            onsubmit="return confirm('Are you sure you want to delete {{sensor['sensor_model_name']}} on slot {{sensor['sensor_slot']}}?');">
                             <button class="delete" type="submit">Delete</button>
                         </form>
                     </td>
