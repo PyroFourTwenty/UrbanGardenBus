@@ -155,10 +155,12 @@ def sensor_model():
         if sensor_model_from_db:
             print("sensor model combination already exists!")
             return redirect(url_for("sensor_model"))
-
         else:
             print("Sensor model is new or different")
-        new_sensor_model = SensorModel(model_name=form.model_name.data, phenomenon_name=form.phenomenon_name.data,unit_name=form.unit_name.data)
+        new_sensor_model = SensorModel(model_name=form.model_name.data, 
+            phenomenon_name=form.phenomenon_name.data,
+            unit_name=form.unit_name.data,
+            calibration_needed=form.calibration_needed.data)
         db.session.add(new_sensor_model)
         db.session.commit()
         return redirect(url_for("sensor_model"))
@@ -170,7 +172,8 @@ def sensor_model():
             "id": sensor_model.id,
             "model_name" : sensor_model.model_name,
             "phenomenon_name": sensor_model.phenomenon_name,
-            "unit_name": sensor_model.unit_name
+            "unit_name": sensor_model.unit_name,
+            "calibration_needed": sensor_model.calibration_needed
             }
         )  
 
