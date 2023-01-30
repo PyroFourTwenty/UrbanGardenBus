@@ -23,7 +23,7 @@ class Sensor(db.Model):
 class CalibrationValueForSensor(db.Model):
     id = db.Column(db.Integer, primary_key = True)
     belongs_to_sensor_id = db.Column(db.Integer, nullable=False)
-    calibration_value = db.Column(db.Float, nullable=False)
+    calibration_value = db.Column(db.Float, default = 0, nullable=False)
 
 class SensorModel(db.Model):
     id = db.Column(db.Integer, primary_key = True)
