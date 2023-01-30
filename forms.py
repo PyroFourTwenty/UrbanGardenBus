@@ -37,10 +37,7 @@ class AddNewSensorToStation(FlaskForm):
 
     def __init__(self, *args, **kwargs):
         super(AddNewSensorToStation,self).__init__(*args, **kwargs)
-        sensors_from_file = []
-        for sensor in supported_sensors.sensors:
-            sensors_from_file.append((sensor,supported_sensors.sensors[sensor]["model_name"]))
-        self.sensor_type.choices = sensors_from_file
+
 
 class CreateNewSensorModelForm(FlaskForm):
     model_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Name of the sensor model"})
