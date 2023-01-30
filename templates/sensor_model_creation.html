@@ -17,6 +17,8 @@
             {{form.phenomenon_name}}
             <label for="unit_name">Unit:</label>
             {{form.unit_name}}
+            <label for="calibration_needed">Calibration needed?</label>
+            {{form.calibration_needed}}
             {{form.submit}}
         </form>
     </div>
@@ -27,6 +29,7 @@
             <th>Sensor model name</th>
             <th>observed phenomenon</th>
             <th>unit</th>
+            <th>calibration required</th>
         </tr>
         {% for sensor_model in available_sensors %}
         <tr>
@@ -34,6 +37,13 @@
             <td>{{sensor_model.model_name}}</td>
             <td>{{sensor_model.phenomenon_name}}</td>
             <td>{{sensor_model.unit_name}}</td>
+            <td>{% if sensor_model.calibration_needed %}
+                yes
+                {% else %}
+                no
+                {% endif %}
+
+            </td>
         </tr>
 
         {% endfor %}
