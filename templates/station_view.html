@@ -100,31 +100,51 @@
             transition: background-color 0.5s ease;
         }
     </style>
+    <link rel="stylesheet" href="{{url_for('static', filename='prism.css')}}" />
 </head>
 
 <body>
+
+    <script src="{{url_for('static', filename='prism.js')}}"></script>
+
+
     <button id="collapsible" type="button" class="collapsible">Edit or delete {{station.station_name}}</button>
 
     <div class="content">
-
+        <h1>Python client code</h1>
+        <pre><code class="language-python">{{python_client_code}}</code></pre>
         <div class="form_container" style="display: flex; flex-direction: column">
             <h1>Station meta data</h1>
             <form method="POST" action="">
                 {{form.hidden_tag()}}
                 <label for="station_name">Station name:</label>
                 {{form.station_name}}
+                <label>UrbanGardenBus NodeId:</label>
+                <input id="station_id" type="text" value="{{station.id}}" disabled>    
                 <label for="latitude">Latitude:</label>
                 {{form.latitude}}
                 <label for="longitude">Longitude:</label>
                 {{form.longitude}}
                 <label for="height">Height:</label>
-                {{form.height}}
+                {{form.height}}          
                 {{form.submit}}
-            </form>
+            </form>  
             <form action="{{url_for('delete_station', id=station.id)}}"
                 onsubmit="return confirm('Are you sure you want to delete {{station.station_name}} and all its sensors?');">
                 <button class='delete' type="submit">Delete this station</button>
             </form>
+            <h1>TheThingsNetwork</h1>
+            <label>TheThingsNetwork DevEUI:</label>
+            <input id="ttn_dev_eui" type="text" value="{{ttn_data['dev_eui']}}" disabled>
+            <label>TheThingsNetwork DevId:</label>
+            <input id="ttn_dev_id" type="text" value="{{ttn_data['dev_id']}}" disabled>
+            <label>TheThingsNetwork AppKey:</label>
+            <input id="ttn_app_key" type="text" value="{{ttn_data['app_key']}}" disabled>
+            <label>TheThingsNetwork JoinEUI:</label>
+            <input id="ttn_join_eui" type="text" value="{{ttn_data['join_eui']}}" disabled>
+            <h1>OpenSenseMap</h1>
+            <label>OpenSenseMap Sensebox Id:</label>
+            <input id="osem_id" type="text" value="{{osem_data['sensebox_id']}}" disabled>
             <h1>Sensors</h1>
             <form method="POST" action="{{url_for('add_sensor_to_station', station_id=station.id)}}">
                 {{sensor_form.hidden_tag()}}
@@ -136,7 +156,6 @@
                 {{sensor_form.slot}}
                 {{sensor_form.submit}}
             </form>
-
             {% if sensors|length == 0 %}
             <h2>No sensors added yet</h2>
             {% else %}
@@ -157,7 +176,7 @@
                     <td>
                         {% if sensor["calibration_needed"] %}
                         <form method="POST" 
-                            action="{{url_for('calibrate_sensor', sensor_id=sensor["sensor_id"])}}"
+                            action="{{url_for('calibrate_sensor', sensor_id=sensor['sensor_id'])}}"
                             onsubmit="return false;">
                             <input onfocusout="this.form.submit(); return false;"
                                 onkeypress='javascript: if(event.key==="Enter"){event.preventDefault();this.form.submit();return false;}'    
