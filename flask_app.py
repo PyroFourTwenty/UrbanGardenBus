@@ -6,6 +6,8 @@ from database import db
 from flask_bcrypt import Bcrypt
 import folium
 from folium.features import ClickForLatLng, ClickForMarker, LatLngPopup
+from ApiAccess.OsemAccess import OsemAccess
+from ApiAccess.TtnAccess import TtnAccess
 import json
 from werkzeug.exceptions import BadRequestKeyError
 from jinja2 import Template
@@ -20,7 +22,9 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
-
+osem_access = None
+ttn_access = None
+ttn_app_id = "dev-ubg-app"
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -100,10 +104,13 @@ def login():
 @app.route('/dashboard',methods=['GET','POST'])
 @login_required
 def dashboard():
-    #6255f63a48a265001b70231c
-    #request = "https://api.opensensemap.org/boxes/5f7372f2821102001ba0ed95"
-    request = "https://api.opensensemap.org/boxes/6255f63a48a265001b70231c"
-    data = requests.get(request).json()
+    current_user_id = User.query.filter_by(username=current_user.username).first().id
+    data = []
+    for station in Station.query.filter_by(belongs_to_user_id=current_user_id):
+        if station.osem_sensebox_id:
+            request = "https://api.opensensemap.org/boxes/{sensebox_id}".format(sensebox_id=station.osem_sensebox_id)
+            json_response = requests.get(request).json()
+            data.append(json_response)
     return render_template('dashboard.html',username=current_user.username, data=data)
 
 @app.route('/stations',methods=['GET','POST'])
@@ -113,13 +120,41 @@ def stations():
     current_user_id = User.query.filter_by(username=current_user.username).first().id
     if form.validate_on_submit():
         print('user', current_user.username,'wants to submit a new station called', form.station_name.data )
-        new_station = Station(station_name=form.station_name.data,
-            belongs_to_user_id = current_user_id,
-            latitude=form.latitude.data,
-            longitude=form.longitude.data,
-            height=form.height.data)
-        db.session.add(new_station)
-        db.session.commit()
+        dev_eui = ttn_access.generate_random_dev_eui()
+        dev_id = str(form.station_name.data).replace(" ","-").lower()+ttn_access.generate_random_dev_eui(4)
+        app_key = ttn_access.generate_random_dev_eui(16)
+        join_eui = '1111111111111111'
+        name_of_new_sensebox = form.station_name.data
+        ttn_status_tuple = ttn_access.create_new_ttn_enddevice(join_eui=join_eui, dev_eui=dev_eui, dev_id=dev_id, app_id=ttn_app_id, app_key=app_key)
+        print("creating new enddevice status code:",ttn_status_tuple)
+        if ttn_status_tuple[0]==200 and ttn_status_tuple[1]==200 and ttn_status_tuple[2]==200 and ttn_status_tuple[3]==200:
+            osem_status_tuple = osem_access.post_new_sensebox(name_of_new_sensebox, 
+                dev_id, 
+                ttn_app_id,
+                lat=form.latitude.data,
+                lng=form.longitude.data,
+                height=form.height.data)
+            print("creating new sensebox status code:", osem_status_tuple)
+
+            if osem_status_tuple[0]==201:
+                osem_sensebox_id = osem_status_tuple[1]
+
+                new_station = Station(station_name=form.station_name.data,
+                    belongs_to_user_id = current_user_id,
+                    latitude=form.latitude.data,
+                    longitude=form.longitude.data,
+                    height=form.height.data,
+                    ttn_enddevice_dev_eui = dev_eui,
+                    ttn_enddevice_dev_id = dev_id,
+                    ttn_enddevice_app_key = app_key,
+                    ttn_enddevice_join_eui= join_eui,
+                    osem_sensebox_id = osem_sensebox_id
+                )
+            
+                db.session.add(new_station)
+                db.session.commit()
+
+
         return redirect(url_for('stations'))
     user_dict = {}
     
@@ -207,14 +242,22 @@ def update_station(id,extend_collapsible=True):
         
         
         sensors_of_station_from_db = Sensor.query.filter_by(belongs_to_station_id = id).all()
-
+        ttn_data= {
+            "dev_eui": station.ttn_enddevice_dev_eui,
+            "dev_id" : station.ttn_enddevice_dev_id,
+            "app_key" : station.ttn_enddevice_app_key,
+            "join_eui" : station.ttn_enddevice_join_eui
+        }
+        osem_data = {
+            "sensebox_id": station.osem_sensebox_id
+        }
         sensor_data_for_form = []
         for sensor in sensors_of_station_from_db:
             
             sensor_model = SensorModel.query.filter_by(id = sensor.sensor_model_id).first()
             sensor_model_name = sensor_model.model_name
             phenomenon = sensor_model.phenomenon_name
-            calibration_value_row = CalibrationValueForSensor.query.filter_by(belongs_to_sensor_id=sensor.id).first()#.calibration_value
+            calibration_value_row = CalibrationValueForSensor.query.filter_by(belongs_to_sensor_id=sensor.id).first()
             calibration_value_for_sensor = None
             if calibration_value_row:
                 calibration_value_for_sensor = calibration_value_row.calibration_value
@@ -231,9 +274,72 @@ def update_station(id,extend_collapsible=True):
         blocked_slots_for_station = []
         for sensor in Sensor.query.filter_by(belongs_to_station_id=id):
             blocked_slots_for_station.append(sensor.station_slot)
-        return render_template('station_view.html', form=form, station=station, sensor_form=sensor_form, sensors=sensor_data_for_form, blocked_slots_for_station=json.dumps(blocked_slots_for_station), extend_collapsible=json.dumps(extend_collapsible), map=map())
+        
+        python_code_example = get_python_code_example_for_station(station.id)
+        
+        return render_template('station_view.html',python_client_code = python_code_example,  form=form, ttn_data=ttn_data, osem_data=osem_data, station=station, sensor_form=sensor_form, sensors=sensor_data_for_form, blocked_slots_for_station=json.dumps(blocked_slots_for_station), extend_collapsible=json.dumps(extend_collapsible), map=map())
     else:
         return Response('not yours, sorry',status=403)
+
+def get_python_code_example_for_station(station_id):
+    sensors = []
+
+    for sensor in Sensor.query.filter_by(belongs_to_station_id=station_id):
+        sensor_model = SensorModel.query.filter_by(id=sensor.sensor_model_id).first()
+        model_name_in_snakecase = str(sensor_model.model_name).lower().replace(" ", "_").replace("-","_")
+        sensor_to_append = {
+            "sensor_name_in_snakecase" : model_name_in_snakecase,
+            "needs_calibration" : sensor_model.calibration_needed,
+            "slot": sensor.station_slot,
+            "model_id": sensor.sensor_model_id
+        }
+        sensors.append(sensor_to_append)
+    
+    s = """
+from GardenBusClient.sensor import GardenBusSensor
+from GardenBusClient.client import GardenBusClient
+import can
+{% for sensor in sensors %}
+def get_value_for_{{sensor.sensor_name_in_snakecase}}():
+    return 123.4 #replace '123.4' with your sensor reading
+
+{% if sensor.needs_calibration %}def apply_calibration_value_for_{{sensor.sensor_name_in_snakecase}}(value, calibration_value):
+    value += calibration_value
+    # you can do further value processing here
+    # i.e. you can convert a value reading to a percentage using this 
+    return value
+{% endif %}{% endfor %}
+if __name__=='__main__':
+    client = GardenBusClient(
+        # this example utilizes the virtual canbus
+        bus=can.interface.Bus('test', bustype='virtual'),
+        # the id of the node, has to be unique, values can be (including) 1 and 65535
+        node_id={{station_id}},
+        tick_rate=30.0,  # specifies the seconds between "alive" packets; defaults to 30.0
+        # if set to True, the client starts the (blocking) loop; defaults to True
+        start_looping=True,
+        print_tick_rate=True  # prints the tick rate in constructor; defaults to True
+    )
+
+    client.send_entry_packet()
+    {% for sensor in sensors %}
+    {{sensor.sensor_name_in_snakecase}} = GardenBusSensor(
+        sensor_model_id = {{sensor.model_id}},
+        get_value_function=get_value_for_{{sensor.sensor_name_in_snakecase}}{% if sensor.needs_calibration %},
+        calibration_function=apply_calibration_value_for_{{sensor.sensor_name_in_snakecase}}
+    {% endif %})
+
+    register_success = client.register_sensor(
+        sensor = {{sensor.sensor_name_in_snakecase}},
+        slot = {{sensor.slot}},
+        resend_count = 6,
+        response_timeout = 30
+    )
+    calibration_success = client.calibrate_sensor({{sensor.sensor_name_in_snakecase}},{{sensor.slot}})  
+    {%endfor%}
+    """
+
+    return Template(s).render(sensors=sensors, station_id=station_id)
 
 @app.route('/sensor/calibrate/<sensor_id>', methods=['POST', 'PUT'])
 @login_required
@@ -266,10 +372,13 @@ def delete_station(id):
         return Response('Station does not exist', status=404)
     station_belongs_to_current_user=User.query.filter_by(username=current_user.username).first().id == station_query.first().belongs_to_user_id
     if station_belongs_to_current_user:
-        delete_sensors = Sensor.__table__.delete().where(Sensor.belongs_to_station_id==id)
-        db.session.execute(delete_sensors)
-        station_query.delete()
-        db.session.commit()
+        sensebox_id = station_query.first().osem_sensebox_id
+        if osem_access.delete_sensebox(sensebox_id)==200:
+
+            delete_sensors = Sensor.__table__.delete().where(Sensor.belongs_to_station_id==id)
+            db.session.execute(delete_sensors)
+            station_query.delete()
+            db.session.commit()
         return redirect(url_for('stations'))
     else:
         return 'nope, not yours'
@@ -277,7 +386,7 @@ def delete_station(id):
 @app.route('/sensor/<station_id>', methods=['POST'])
 @login_required
 def add_sensor_to_station(station_id):
-    sensor_type = request.form['sensor_type']
+    sensor_model_id = request.form['sensor_type']
     slot = None
     try:
         slot = int(request.form['slot'])
@@ -291,14 +400,27 @@ def add_sensor_to_station(station_id):
         return Response("Slot occupied", status=400)
     station_belongs_to_current_user=User.query.filter_by(username=current_user.username).first().id == station_query.first().belongs_to_user_id
     if station_belongs_to_current_user:
-        new_sensor = Sensor(
-            belongs_to_station_id=station_id,
-            sensor_model_id=sensor_type,
-            station_slot=slot
-        )
-        db.session.add(new_sensor)
-        db.session.commit()
-        return redirect(url_for('update_station', id=station_id))
+        sensebox_id = station_query.first().osem_sensebox_id
+        sensor_model = SensorModel.query.filter_by(id=sensor_model_id).first()
+        put_sensor_result = osem_access.put_new_sensor(
+                sensebox_id=sensebox_id,
+                icon='', 
+                phenomenon=sensor_model.phenomenon_name,
+                sensor_type=sensor_model.model_name,
+                unit=sensor_model.unit_name)
+        if put_sensor_result[0]==200:
+            new_sensor = Sensor(
+                belongs_to_station_id=station_id,
+                sensor_model_id=sensor_model_id,
+                station_slot=slot,
+                osem_sensor_id = put_sensor_result[1]
+            )
+            db.session.add(new_sensor)
+            db.session.commit()
+            return redirect(url_for('update_station', id=station_id))
+        else:
+            return redirect(url_for('update_station', id=station_id))
+
     else:
         return Response("Station is not yours, sorry", status=403)
 
@@ -314,11 +436,18 @@ def delete_sensor(station_id, slot):
     if station_belongs_to_current_user:
         sensor = Sensor.query.filter_by(belongs_to_station_id=station_id, station_slot=slot).first()
         if sensor:
-            db.session.query(Sensor).filter(Sensor.belongs_to_station_id==station_id, Sensor.station_slot==slot).delete()
             calibration_value_for_sensor = CalibrationValueForSensor.query.filter_by(belongs_to_sensor_id=sensor.id).first()
             if calibration_value_for_sensor:
                 CalibrationValueForSensor.query.filter_by(belongs_to_sensor_id=sensor.id).delete()
-            db.session.commit()
+            osem_sensebox_id_for_sensor = station_query.first().osem_sensebox_id
+            osem_sensor_id_for_sensor = sensor.osem_sensor_id
+            print('sensebox_id: ',osem_sensebox_id_for_sensor)
+            print('sensor_id: ',osem_sensor_id_for_sensor)
+
+            deletion = osem_access.delete_sensor(sensebox_id=osem_sensebox_id_for_sensor, sensor_id=osem_sensor_id_for_sensor)
+            if deletion==200:
+                db.session.query(Sensor).filter(Sensor.belongs_to_station_id==station_id, Sensor.station_slot==slot).delete()
+                db.session.commit()
             return redirect(url_for('update_station', id=station_id))
         else:
             return Response("Sensor slot not found for this station", status=404)
@@ -348,5 +477,10 @@ def logout():
 
 
 if __name__ == '__main__':
-
+    ttn_full_acc_key = ""
+    ttn_username = ""
+    osem_access = OsemAccess("", "")
+    ttn_access = TtnAccess(full_account_key=ttn_full_acc_key,
+        username=ttn_username
+    )
     app.run(debug=True, host='0.0.0.0')
