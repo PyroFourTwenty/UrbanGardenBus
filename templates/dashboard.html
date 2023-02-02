@@ -11,13 +11,19 @@
 
     <a href="{{url_for('stations')}}">Stations</a>
     <a href="{{url_for('logout')}}">Log out</a>
+    {% for  sensebox_data in data %}
     <h3>
-        {{data["name"]}}
+        {{sensebox_data["name"]}}
     </h3>
-    {% for sensor in data["sensors"] %}
+        {% for sensor in sensebox_data["sensors"] %}
     <div>
-        {{sensor["title"]}} : {{sensor["lastMeasurement"]["value"]}} {{sensor["unit"]}}
+            {% if 'lastMeasurement' in sensor %}
+                {{sensor["title"]}} :{{sensor["lastMeasurement"]["value"]}} {{sensor["unit"]}}
+            {% else %}
+                {{sensor["title"]}} : no value yet
+            {% endif %}            
     </div>
+        {% endfor %}
     {% endfor %}
 </body>
 </html>
