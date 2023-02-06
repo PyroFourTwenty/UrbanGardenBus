@@ -345,7 +345,10 @@ def delete_station(id):
 @app.route('/sensor/<station_id>', methods=['POST'])
 @login_required
 def add_sensor_to_station(station_id):
-    sensor_model_id = request.form['sensor_type']
+    try:
+        sensor_model_id = request.form['sensor_type']
+    except BadRequestKeyError:
+        return Response("Please provide a sensor type", status=400)
     slot = None
     try:
         slot = int(request.form['slot'])
@@ -403,7 +406,6 @@ def update_payload_formatter_for_ttn_enddevice(station_id):
     return status
 
 
-
 @app.route('/sensor/delete/<station_id>/<slot>', methods=['POST'])
 @login_required
 def delete_sensor(station_id, slot):
@@ -425,11 +427,16 @@ def delete_sensor(station_id, slot):
             print('sensor_id: ',osem_sensor_id_for_sensor)
 
             deletion = osem_access.delete_sensor(sensebox_id=osem_sensebox_id_for_sensor, sensor_id=osem_sensor_id_for_sensor)
-            if deletion==200:
+            sensor_id_present_in_osem = None
+            if deletion!=200:
+                sensor_id_present_in_osem = osem_sensor_id_for_sensor in  osem_access.get_sensor_ids_of_sensebox(osem_sensebox_id_for_sensor)
+                print("Deletion status is", deletion, ', checking if sensor id is still present in sensebox: ', sensor_id_present_in_osem)
+
+            if deletion==200 or not sensor_id_present_in_osem:
                 db.session.query(Sensor).filter(Sensor.belongs_to_station_id==station_id, Sensor.station_slot==slot).delete()
                 db.session.commit()
                 update_payload_formatter_for_ttn_enddevice(station_id)
-            else:
+            else:                     
                 print("Deletion of sensor in OSeM failed with status code", deletion)
             return redirect(url_for('update_station', id=station_id))
         else:
