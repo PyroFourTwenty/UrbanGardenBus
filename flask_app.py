@@ -2,6 +2,7 @@ from flask import Flask, render_template, redirect, url_for, request, Response
 from flask_login import login_user, LoginManager, login_required, logout_user, current_user
 from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation, CreateNewSensorModelForm
 from models import User, Station, Sensor, SensorModel, CalibrationValueForSensor
+from CodeGeneration.code_generator import CodeGenerator
 from database import db
 from flask_bcrypt import Bcrypt
 import folium
@@ -138,7 +139,6 @@ def stations():
 
             if osem_status_tuple[0]==201:
                 osem_sensebox_id = osem_status_tuple[1]
-
                 new_station = Station(station_name=form.station_name.data,
                     belongs_to_user_id = current_user_id,
                     latitude=form.latitude.data,
@@ -294,52 +294,8 @@ def get_python_code_example_for_station(station_id):
             "model_id": sensor.sensor_model_id
         }
         sensors.append(sensor_to_append)
-    
-    s = """
-from GardenBusClient.sensor import GardenBusSensor
-from GardenBusClient.client import GardenBusClient
-import can
-{% for sensor in sensors %}
-def get_value_for_{{sensor.sensor_name_in_snakecase}}():
-    return 123.4 #replace '123.4' with your sensor reading
+    return CodeGenerator.get_python_client_code(sensors,station_id)
 
-{% if sensor.needs_calibration %}def apply_calibration_value_for_{{sensor.sensor_name_in_snakecase}}(value, calibration_value):
-    value += calibration_value
-    # you can do further value processing here
-    # i.e. you can convert a value reading to a percentage using this 
-    return value
-{% endif %}{% endfor %}
-if __name__=='__main__':
-    client = GardenBusClient(
-        # this example utilizes the virtual canbus
-        bus=can.interface.Bus('test', bustype='virtual'),
-        # the id of the node, has to be unique, values can be (including) 1 and 65535
-        node_id={{station_id}},
-        tick_rate=30.0,  # specifies the seconds between "alive" packets; defaults to 30.0
-        # if set to True, the client starts the (blocking) loop; defaults to True
-        start_looping=True,
-        print_tick_rate=True  # prints the tick rate in constructor; defaults to True
-    )
-
-    client.send_entry_packet()
-    {% for sensor in sensors %}
-    {{sensor.sensor_name_in_snakecase}} = GardenBusSensor(
-        sensor_model_id = {{sensor.model_id}},
-        get_value_function=get_value_for_{{sensor.sensor_name_in_snakecase}}{% if sensor.needs_calibration %},
-        calibration_function=apply_calibration_value_for_{{sensor.sensor_name_in_snakecase}}
-    {% endif %})
-
-    register_success = client.register_sensor(
-        sensor = {{sensor.sensor_name_in_snakecase}},
-        slot = {{sensor.slot}},
-        resend_count = 6,
-        response_timeout = 30
-    )
-    calibration_success = client.calibrate_sensor({{sensor.sensor_name_in_snakecase}},{{sensor.slot}})  
-    {%endfor%}
-    """
-
-    return Template(s).render(sensors=sensors, station_id=station_id)
 
 @app.route('/sensor/calibrate/<sensor_id>', methods=['POST', 'PUT'])
 @login_required
@@ -375,10 +331,13 @@ def delete_station(id):
         sensebox_id = station_query.first().osem_sensebox_id
         if osem_access.delete_sensebox(sensebox_id)==200:
 
-            delete_sensors = Sensor.__table__.delete().where(Sensor.belongs_to_station_id==id)
-            db.session.execute(delete_sensors)
-            station_query.delete()
-            db.session.commit()
+            ttn_enddevice_deletion = ttn_access.delete_ttn_enddevice_from_app(ttn_app_id, station_query.first().ttn_enddevice_dev_id)
+            if ttn_enddevice_deletion == 200:
+                delete_sensors = Sensor.__table__.delete().where(Sensor.belongs_to_station_id==id)
+                db.session.execute(delete_sensors)
+
+                station_query.delete()
+                db.session.commit()
         return redirect(url_for('stations'))
     else:
         return 'nope, not yours'
@@ -415,14 +374,35 @@ def add_sensor_to_station(station_id):
                 station_slot=slot,
                 osem_sensor_id = put_sensor_result[1]
             )
+            
+
             db.session.add(new_sensor)
             db.session.commit()
+            
+            update_payload_formatter_for_ttn_enddevice(station_id)
             return redirect(url_for('update_station', id=station_id))
         else:
             return redirect(url_for('update_station', id=station_id))
 
     else:
         return Response("Station is not yours, sorry", status=403)
+
+def update_payload_formatter_for_ttn_enddevice(station_id):
+    print("updating payload formatter for station", station_id)
+    osem_sensor_ids = []
+    for sensor in Sensor.query.filter_by(belongs_to_station_id=station_id).order_by(Sensor.station_slot.asc()):
+        osem_sensor_ids.append(sensor.osem_sensor_id)
+    station = Station.query.filter_by(id=station_id).first()
+    status = ttn_access.create_new_ttn_enddevice_formatter(
+        dev_id=station.ttn_enddevice_dev_id,
+        payload_formatter_js=CodeGenerator.get_ttn_payload_formatter_code(osem_sensor_ids),
+        application_id=ttn_app_id            
+    )
+    print("status",status)
+
+    return status
+
+
 
 @app.route('/sensor/delete/<station_id>/<slot>', methods=['POST'])
 @login_required
@@ -448,6 +428,9 @@ def delete_sensor(station_id, slot):
             if deletion==200:
                 db.session.query(Sensor).filter(Sensor.belongs_to_station_id==station_id, Sensor.station_slot==slot).delete()
                 db.session.commit()
+                update_payload_formatter_for_ttn_enddevice(station_id)
+            else:
+                print("Deletion of sensor in OSeM failed with status code", deletion)
             return redirect(url_for('update_station', id=station_id))
         else:
             return Response("Sensor slot not found for this station", status=404)
@@ -479,8 +462,12 @@ def logout():
 if __name__ == '__main__':
     ttn_full_acc_key = ""
     ttn_username = ""
+    ttn_app_id = ""
+
     osem_access = OsemAccess("", "")
     ttn_access = TtnAccess(full_account_key=ttn_full_acc_key,
         username=ttn_username
     )
+    ttn_access.add_webhook_to_ttn_app(ttn_app_id,webhook_id='ugb-osem-webhook')
+
     app.run(debug=True, host='0.0.0.0')
