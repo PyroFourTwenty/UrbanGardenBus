@@ -151,6 +151,7 @@ class OsemAccess:
                 }
             ]
         }
+        print("Deleting sensor {sensor}  in sensebox id {sensebox} ".format(sensor=sensor_id, sensebox=sensebox_id))
         delete_response = requests.put(delete_url, headers=headers, data=json.dumps(body))
         if delete_response.status_code==400:
             if "needs at least one" in delete_response.json()["message"]:
