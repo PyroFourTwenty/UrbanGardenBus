@@ -19,10 +19,21 @@ class GardenBusClient():
     __last_alive = 0
     last_headstation_alive = None
 
-    def __init__(self, bus: can.interface.Bus, node_id: int, tick_rate: float = 30, start_looping: bool = True, print_tick_rate=True):
+    ttn_dev_eui = None
+    ttn_dev_id = None
+    ttn_app_key = None
+    ttn_join_eui = None
+
+    def __init__(self, bus: can.interface.Bus, node_id: int, ttn_dev_eui:str, ttn_dev_id:str, ttn_app_key:str, ttn_join_eui:str,tick_rate: float = 30, start_looping: bool = True, print_tick_rate=True):
         self.bus = bus
         self.node_id = node_id
         self.tick_rate = tick_rate
+        
+        self.ttn_dev_eui = ttn_dev_eui 
+        self.ttn_dev_id = ttn_dev_id 
+        self.ttn_app_key = ttn_app_key 
+        self.ttn_join_eui = ttn_join_eui
+        
         if print_tick_rate:
             print("[ {node_id} ] Initializing (tick rate: {tick_rate}s)".format(
                 node_id=node_id, tick_rate=tick_rate))
