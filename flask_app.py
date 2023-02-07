@@ -13,6 +13,7 @@ import json
 from werkzeug.exceptions import BadRequestKeyError
 from jinja2 import Template
 import requests
+import re
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
@@ -275,27 +276,72 @@ def update_station(id,extend_collapsible=True):
         for sensor in Sensor.query.filter_by(belongs_to_station_id=id):
             blocked_slots_for_station.append(sensor.station_slot)
         
-        python_code_example = get_python_code_example_for_station(station.id)
-        
-        return render_template('station_view.html',python_client_code = python_code_example,  form=form, ttn_data=ttn_data, osem_data=osem_data, station=station, sensor_form=sensor_form, sensors=sensor_data_for_form, blocked_slots_for_station=json.dumps(blocked_slots_for_station), extend_collapsible=json.dumps(extend_collapsible), map=map())
+        python_code_example = get_code_example_for_station(station.id, 'python',ttn_data)
+        lora32_code_example = get_code_example_for_station(station.id, 'lora32',ttn_data)
+        return render_template('station_view.html',
+                                python_client_code = python_code_example,
+                                lora32_client_code = lora32_code_example,
+                                form=form, 
+                                ttn_data=ttn_data, 
+                                osem_data=osem_data, 
+                                station=station, 
+                                sensor_form=sensor_form, 
+                                sensors=sensor_data_for_form, 
+                                blocked_slots_for_station=json.dumps(blocked_slots_for_station), 
+                                extend_collapsible=json.dumps(extend_collapsible), 
+                                map=map())
     else:
         return Response('not yours, sorry',status=403)
 
-def get_python_code_example_for_station(station_id):
-    sensors = []
+def get_model_name_in_camelcase(model_name):
+    split_model_name = model_name.split(" ")
+    camelcase_name = ""
+    for word in split_model_name:
+        if word!="":
+            lower_word = list(word.lower())
+            lower_word[0] = lower_word[0].upper()
+        camelcase_name+="".join(lower_word)
+    camelcase_name =  list(camelcase_name)
+    camelcase_name[0]=camelcase_name[0].lower()
+    camelcase_name="".join(list(camelcase_name))
+    return camelcase_name
 
+def convert_ttn_data_for_lora32_usage(ttn_data):
+    ttn_data = {
+            "dev_eui": ', '.join(['0x'+ value.upper() for value in re.findall('..',ttn_data['dev_eui'])[::-1]]), # reverse order for little endian and add '0x' in front of every value 
+            "dev_id" : ', '.join(['0x'+ value.upper() for value in re.findall('..',ttn_data['dev_id'])]),
+            "app_key" : ', '.join(['0x'+ value.upper() for value in re.findall('..',ttn_data['app_key'])]),
+            "join_eui" : ', '.join(['0x'+ value.upper() for value in re.findall('..',ttn_data['join_eui'])[::-1]]), # reverse order for little endian and add '0x' in front of every value
+        }
+    return ttn_data
+
+def get_code_example_for_station(station_id, client_type,ttn_data):
+    sensors = []    
     for sensor in Sensor.query.filter_by(belongs_to_station_id=station_id):
         sensor_model = SensorModel.query.filter_by(id=sensor.sensor_model_id).first()
         model_name_in_snakecase = str(sensor_model.model_name).lower().replace(" ", "_").replace("-","_")
+        model_name_in_camelcase = get_model_name_in_camelcase(sensor_model.model_name)
+        model_name_in_camelcase_first_letter_cap = list(model_name_in_camelcase)
+        model_name_in_camelcase_first_letter_cap[0]=model_name_in_camelcase_first_letter_cap[0].upper()
+        model_name_in_camelcase_first_letter_cap = "".join(model_name_in_camelcase_first_letter_cap)
+        calibration_value = None
+        if sensor_model.calibration_needed:
+            calibration_value = CalibrationValueForSensor.query.filter_by(belongs_to_sensor_id=sensor.id).first().calibration_value
         sensor_to_append = {
             "sensor_name_in_snakecase" : model_name_in_snakecase,
+            "sensor_name_in_camelcase" : model_name_in_camelcase,
+            "sensor_name_in_camelcase_first_letter_cap": model_name_in_camelcase_first_letter_cap,
             "needs_calibration" : sensor_model.calibration_needed,
+            "calibration_value": calibration_value,
             "slot": sensor.station_slot,
             "model_id": sensor.sensor_model_id
         }
         sensors.append(sensor_to_append)
-    return CodeGenerator.get_python_client_code(sensors,station_id)
-
+    if client_type=='python':
+        return CodeGenerator.get_python_client_code(sensors,station_id,ttn_data)
+    elif client_type=='lora32':
+        ttn_data=convert_ttn_data_for_lora32_usage(ttn_data)
+        return CodeGenerator.get_lora32_client_code(sensors,station_id,ttn_data)
 
 @app.route('/sensor/calibrate/<sensor_id>', methods=['POST', 'PUT'])
 @login_required
@@ -377,11 +423,15 @@ def add_sensor_to_station(station_id):
                 station_slot=slot,
                 osem_sensor_id = put_sensor_result[1]
             )
-            
-
             db.session.add(new_sensor)
             db.session.commit()
-            
+            if sensor_model.calibration_needed:
+                new_calibration_value = CalibrationValueForSensor(
+                    belongs_to_sensor_id = new_sensor.id,
+                    calibration_value=0.0
+                )
+                db.session.add(new_calibration_value)
+            db.session.commit()            
             update_payload_formatter_for_ttn_enddevice(station_id)
             return redirect(url_for('update_station', id=station_id))
         else:
@@ -404,6 +454,7 @@ def update_payload_formatter_for_ttn_enddevice(station_id):
     print("status",status)
 
     return status
+
 
 
 @app.route('/sensor/delete/<station_id>/<slot>', methods=['POST'])
@@ -430,7 +481,7 @@ def delete_sensor(station_id, slot):
             sensor_id_present_in_osem = None
             if deletion!=200:
                 sensor_id_present_in_osem = osem_sensor_id_for_sensor in  osem_access.get_sensor_ids_of_sensebox(osem_sensebox_id_for_sensor)
-                print("Deletion status is", deletion, ', checking if sensor id is still present in sensebox: ', sensor_id_present_in_osem)
+                print("Deletion status is ", deletion, ', checking if sensor id is still present in sensebox: ', sensor_id_present_in_osem)
 
             if deletion==200 or not sensor_id_present_in_osem:
                 db.session.query(Sensor).filter(Sensor.belongs_to_station_id==station_id, Sensor.station_slot==slot).delete()
