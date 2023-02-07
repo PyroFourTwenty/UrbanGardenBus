@@ -13,7 +13,7 @@ class Headstation():
     nodes_sensors_calibration_data: dict = None  # has to be set before looping
     tick_rate:float = None
     __last_alive = 0
-    node_id = 1 # headstation id should always be 1
+    node_id = 0 # headstation id should always be 0
 
     def __init__(self, bus, start_looping: bool = True, nodes_sensors_calibration_data={}, tick_rate=30):
         self.bus = bus
@@ -27,12 +27,17 @@ class Headstation():
         msg = can.Message(arbitration_id=arbitration_id, data=bytes)
         self.bus.send(msg)
         return msg
+    
+    def send_entry_packet(self):
+        arbit_id = 100
+        bytes = [ENTRY_PACKET, *number_to_bytes(self.node_id, 2)]
+        return self.send_packet(arbitration_id=arbit_id, bytes=bytes)
 
     def send_alive_packet(self):
         print('[ HEAD ] sending ALIVE packet @',time())
         self.__last_alive = time()
         arbit_id = 100
-        bytes = [3, *number_to_bytes(self.node_id, 2)]
+        bytes = [ALIVE_PACKET, *number_to_bytes(self.node_id, 2)]
         return self.send_packet(arbitration_id=arbit_id, bytes=bytes)
 
     def handle_node_entry(self, node_id: int):
@@ -107,6 +112,7 @@ class Headstation():
                      *list(np.float32(calibration_value).tobytes())
                      ]
             for _ in range(resend_count):
+                print("[ HEAD ] sending calibration response")
                 self.send_packet(arbitration_id=arbit_id, bytes=bytes)
                 timestamp = time()
                 while(self.running and time()-timestamp < response_timeout):
@@ -167,6 +173,7 @@ class Headstation():
     def loop(self):
         self.running = True
         print("[ HEAD ] starting to loop")
+        self.send_entry_packet()
         while self.running:
             if time()-self.__last_alive >= self.tick_rate:
                 self.send_alive_packet()
