@@ -1,7 +1,7 @@
 lora32_code_template = """
 #include <Arduino.h>
-#include <UrbanGardenBusClient/UrbanGardenBusClient.h>
-#include <UrbanGardenBusClient/UrbanGardenBusConfig.h>
+#include <UrbanGardenBusClient.h>
+#include <UrbanGardenBusConfig.h>
 
 UrbanGardenBusClient client;
 
@@ -54,14 +54,14 @@ void setup() {
   
   {%endif%}
   Serial.print("Registering {{sensor.sensor_name_in_camelcase}}OnSlot{{sensor.slot}}: ");
-  if (client.registerSensor({{sensor.sensor_name_in_camelcase}}OnSlot{{sensor.slot}},20)){
+  if (client.registerSensor({{sensor.sensor_name_in_camelcase}}OnSlot{{sensor.slot}},20000)){
     Serial.println("success");
   }else{
     Serial.println("failed");
   }
   {%if sensor.needs_calibration%}
   // or for dynamically requesting a calibration value that is saved at the headstation:
-  client.requestCalibrationForSensor({{sensor.sensor_name_in_camelcase}}OnSlot{{sensor.slot}}, 20);{%endif%}{% endfor %}
+  client.requestCalibrationForSensor({{sensor.sensor_name_in_camelcase}}OnSlot{{sensor.slot}}, 20000);{%endif%}{% endfor %}
 }
 
 void loop() {
