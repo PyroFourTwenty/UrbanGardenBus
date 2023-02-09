@@ -157,7 +157,7 @@ class GardenBusClient():
                             *utils.number_to_bytes(sensor_slot)
                         ]
                         self.send_packet(arbitration_id=arbit_id,
-                                         bytes=calibration_ack_bytes)
+                                        bytes=calibration_ack_bytes)
                         return True
 
     def handle_value_request(self, sensor_slot):
@@ -172,7 +172,7 @@ class GardenBusClient():
             *utils.number_to_bytes(sensor_slot)
         ]
         self.send_packet(arbitration_id=arbit_id,
-                         bytes=value_request_ack_bytes)
+                        bytes=value_request_ack_bytes)
         # get actual sensor reading, this may take longer periods of time, so we send a VALUE_REQUEST_ACK packet beforehand,
         # so that the headstation knows that we got the packet but need more time to acquire the sensor reading
         sensor_value = self.sensors[sensor_slot].get_value()
