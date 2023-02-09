@@ -1,11 +1,13 @@
 import can
-
+import sys
 from GardenBusClient.SupportedSensors import supported_sensors
 from GardenBusClient.sensor import GardenBusSensor
 from . import gb_utils as utils
 from . import gardenbus_config as config
 from time import time, sleep
 import numpy as np
+sys.path.append('..')
+from RAK811.rak811_control import RAK811
 
 
 class GardenBusClient():
@@ -66,7 +68,7 @@ class GardenBusClient():
 
     def send_register_sensor_packet(self, sensor: GardenBusSensor, sensor_slot: int, resend_count: int = 6, response_timeout: float = 30):
         arbit_id = 100
-
+        self.sensors[sensor_slot] = sensor  # save the sensor
         bytes = [
             config.SENSOR_REGISTER_PACKET,  # header -> 1 byte
             *utils.number_to_bytes(self.node_id, 2),  # node_id -> 2 bytes
@@ -94,6 +96,7 @@ class GardenBusClient():
                         print("[ {node} ] registration successful: {sensor}".format(
                             node=self.node_id, sensor=sensor_name))
                         return True  # sensor was successfully registered at the headstation
+                            
         print("{node} giving up".format(node=self.node_id))
         return False  # return False if the client was not able to register the sensor
 
@@ -184,7 +187,7 @@ class GardenBusClient():
         self.send_packet(arbitration_id=arbit_id, bytes=value_response_bytes)
 
     def register_sensor(self, sensor: GardenBusSensor, slot, resend_count: int = 6, response_timeout: float = 30):
-        return self.send_register_sensor_packet(sensor=sensor, sensor_slot=slot, resend_count=6, response_timeout=30)
+        return self.send_register_sensor_packet(sensor=sensor, sensor_slot=slot, resend_count=resend_count, response_timeout=response_timeout)
 
     def unregister_sensor(self, slot):
         return self.send_unregister_sensor_packet(slot)
@@ -206,7 +209,7 @@ class GardenBusClient():
                 self.send_alive_packet()
             if time()-self.last_headstation_alive >= config.HEADSTATION_TICK_RATE:  # if the last alive-packet is more than the tickrate ago
                 print("[ {node_id} ] Headstation timeout detected!".format(node_id=self.node_id))
-
+                
             msg = self.bus.recv(timeout=1)  # wait for 1 second
             if msg is not None:  # handle message if one has been received
                 if msg.data[0] == config.VALUE_REQUEST and utils.bytes_to_number(msg.data[1:3]) == self.node_id:
