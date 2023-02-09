@@ -9,8 +9,9 @@ class GardenBusSensor():
     get_value_function = None 
 
 
-    def __init__(self, sensor_model_id, tags: list, 
+    def __init__(self, sensor_model_id, 
             get_value_function, 
+            tags: list = [],
             calibration_function = None,
             calibration_value: float = None,
             sensor_name: str = None):
