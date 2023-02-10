@@ -4,8 +4,6 @@ from time import time
 from gardenbus_config import *
 from GardenBusClient.SupportedSensors import supported_sensors
 import numpy as np
-
-
 class Headstation():
     connected_clients: dict = None
     bus: can.interface.Bus = None
@@ -13,8 +11,7 @@ class Headstation():
     nodes_sensors_calibration_data: dict = None  # has to be set before looping
     tick_rate:float = None
     __last_alive = 0
-    node_id = 1 # headstation id should always be 1
-
+    node_id = 0 # headstation id should always be 0
     def __init__(self, bus, start_looping: bool = True, nodes_sensors_calibration_data={}, tick_rate=30):
         self.bus = bus
         self.connected_clients = {}
@@ -27,12 +24,17 @@ class Headstation():
         msg = can.Message(arbitration_id=arbitration_id, data=bytes)
         self.bus.send(msg)
         return msg
+    
+    def send_entry_packet(self):
+        arbit_id = 100
+        bytes = [ENTRY_PACKET, *number_to_bytes(self.node_id, 2)]
+        return self.send_packet(arbitration_id=arbit_id, bytes=bytes)
 
     def send_alive_packet(self):
         print('[ HEAD ] sending ALIVE packet @',time())
         self.__last_alive = time()
         arbit_id = 100
-        bytes = [3, *number_to_bytes(self.node_id, 2)]
+        bytes = [ALIVE_PACKET, *number_to_bytes(self.node_id, 2)]
         return self.send_packet(arbitration_id=arbit_id, bytes=bytes)
 
     def handle_node_entry(self, node_id: int):
@@ -94,19 +96,25 @@ class Headstation():
 
     def handle_sensor_calibration_requested(self, node_id: int, sensor_slot: int, sensor_model_id: int, resend_count: int = 6, response_timeout: float = 30):
         arbit_id = 99
-        sensor_calibration_data = self.nodes_sensors_calibration_data[node_id][sensor_slot]
-        calibration_value = sensor_calibration_data["calibration_value"]
+        sensor_model_from_db = get_model_id_of_sensor_of_node(node_id=node_id, sensor_slot=sensor_slot)
+        calibration_value = get_calibration_value_for_sensor_of_node(node_id=node_id, sensor_slot=sensor_slot)
+        if not calibration_value:
+            print('[ HEAD ] Node {node_id} requested calibration value for sensor {sensor_model_id} on slot {sensor_slot} but no calibration value was found'.format(
+            node_id=node_id, sensor_model_id=sensor_model_id, sensor_slot=sensor_slot))
+
+            return False
         print('[ HEAD ] Node {node_id} requested calibration value for sensor {sensor_model_id} on slot {sensor_slot} which is: {calibration_value}'.format(
             node_id=node_id, sensor_model_id=sensor_model_id, sensor_slot=sensor_slot, calibration_value=calibration_value))
 
         # check if the calibration data corresponds to the request of the node
-        if sensor_model_id == sensor_calibration_data["sensor_model_id"]:
+        if sensor_model_id == sensor_model_from_db:
             bytes = [CALIBRATION_RESPONSE,
                      *number_to_bytes(node_id, 2),
                      *number_to_bytes(sensor_slot),
                      *list(np.float32(calibration_value).tobytes())
-                     ]
+                    ]
             for _ in range(resend_count):
+                print("[ HEAD ] sending calibration response")
                 self.send_packet(arbitration_id=arbit_id, bytes=bytes)
                 timestamp = time()
                 while(self.running and time()-timestamp < response_timeout):
@@ -167,6 +175,7 @@ class Headstation():
     def loop(self):
         self.running = True
         print("[ HEAD ] starting to loop")
+        self.send_entry_packet()
         while self.running:
             if time()-self.__last_alive >= self.tick_rate:
                 self.send_alive_packet()
