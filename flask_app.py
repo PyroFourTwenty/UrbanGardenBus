@@ -12,6 +12,7 @@ from werkzeug.exceptions import BadRequestKeyError
 from jinja2 import Template
 import requests
 import re
+import configparser
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
@@ -518,11 +519,14 @@ def logout():
 
 
 if __name__ == '__main__':
-    ttn_full_acc_key = ""
-    ttn_username = ""
-    ttn_app_id = ""
+    config = configparser.ConfigParser()
+    config.read('flask_app_configuration.ini')
 
-    osem_access = OsemAccess("", "")
+    ttn_full_acc_key = config["TTN"]["full_account_key"]
+    ttn_username = config["TTN"]["username"]
+    ttn_app_id = config["TTN"]["app_id"]
+
+    osem_access = OsemAccess(config["OSEM"]["email"], config["OSEM"]["password"])
     ttn_access = TtnAccess(full_account_key=ttn_full_acc_key,
         username=ttn_username
     )
