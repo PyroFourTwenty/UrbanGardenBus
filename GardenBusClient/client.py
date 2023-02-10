@@ -1,6 +1,5 @@
 import can
 import sys
-from GardenBusClient.SupportedSensors import supported_sensors
 from GardenBusClient.sensor import GardenBusSensor
 from . import gb_utils as utils
 from . import gardenbus_config as config
@@ -25,6 +24,8 @@ class GardenBusClient():
     ttn_dev_id = None
     ttn_app_key = None
     ttn_join_eui = None
+
+    lorawan_serial = "serial-here"
 
     def __init__(self, bus: can.interface.Bus, node_id: int, ttn_dev_eui:str, ttn_dev_id:str, ttn_app_key:str, ttn_join_eui:str,tick_rate: float = 30, start_looping: bool = True, print_tick_rate=True):
         self.bus = bus
@@ -201,15 +202,36 @@ class GardenBusClient():
     def calibrate_sensor(self, sensor: GardenBusSensor, sensor_slot):
         return self.send_calibration_request_packet(sensor_model_id=sensor.sensor_model_id, sensor_slot=sensor_slot)
 
+    def send_lorawan_message(self):
+        import numpy as np
+        rak811 = RAK811(self.lorawan_serial)
+        payload = ''
+        for sensor_slot in sorted(self.sensors):
+            sensor_value = self.sensors[sensor_slot].get_value()
+            payload = ''.join([str(hex(b)).replace('0x','') for b in np.float32(sensor_value).tobytes()])
+        rak811.send_lorawan_message(message=payload,
+            region='EU868',
+            app_eui=self.ttn_join_eui, 
+            app_key=self.ttn_app_key,
+            dev_eui=self.ttn_dev_eui
+        )
+
+
     def loop(self):
         sleep(self.tick_rate)
         self.join_network()
+        headstation_timeout_detected = False
         while self.running:
             if time()-self.__last_alive >= self.tick_rate:  # if the last alive-packet is more than the tickrate ago
-                self.send_alive_packet()
-            if time()-self.last_headstation_alive >= config.HEADSTATION_TICK_RATE:  # if the last alive-packet is more than the tickrate ago
+                if not headstation_timeout_detected:
+                    self.send_alive_packet()
+                else:
+                    self.send_lorawan_message()
+            
+            if time()-self.last_headstation_alive >= config.HEADSTATION_TICK_RATE and not headstation_timeout_detected:  # if the last alive-packet is more than the tickrate ago
+                headstation_timeout_detected = True
                 print("[ {node_id} ] Headstation timeout detected!".format(node_id=self.node_id))
-                
+
             msg = self.bus.recv(timeout=1)  # wait for 1 second
             if msg is not None:  # handle message if one has been received
                 if msg.data[0] == config.VALUE_REQUEST and utils.bytes_to_number(msg.data[1:3]) == self.node_id:
@@ -218,7 +240,10 @@ class GardenBusClient():
                 elif msg.data[0] == config.ALIVE_PACKET:
                     node_id = utils.bytes_to_number(msg.data[1:3])
                     if node_id == config.HEADSTATION_NODE_ID:
-                        print("[ {node_id} ] headstation is still connected".format(node_id=self.node_id))
+                        if headstation_timeout_detected:
+                            print("[ {node_id} ] headstation reconnected".format(node_id=self.node_id))
+                        else:
+                            print("[ {node_id} ] headstation is still connected".format(node_id=self.node_id))
 
                         self.last_headstation_alive = time()
                 #print(str(self.node_id), "received a packet:", msg.data[0])
