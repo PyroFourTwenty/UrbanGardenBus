@@ -5,8 +5,6 @@ from models import User, Station, Sensor, SensorModel, CalibrationValueForSensor
 from CodeGeneration.code_generator import CodeGenerator
 from database import db
 from flask_bcrypt import Bcrypt
-import folium
-from folium.features import ClickForLatLng, ClickForMarker, LatLngPopup
 from ApiAccess.OsemAccess import OsemAccess
 from ApiAccess.TtnAccess import TtnAccess
 import json
@@ -54,6 +52,9 @@ def aerial():
 
 @app.route('/map')
 def map():
+    import folium
+    from folium.features import ClickForLatLng, ClickForMarker, LatLngPopup
+
     start_coords = (52.456463,13.52339)
     folium_map = folium.Map(location=start_coords, zoom_start=14, max_zoom=25)
     #tile = folium.TileLayer(
@@ -63,6 +64,7 @@ def map():
     #    overlay = False,
     #    control = True
     #   ).add_to(folium_map)
+    
     click_for_lat_lng =  ClickForLatLng()
     click_for_lat_lng._template = Template(u"""
             {% macro script(this, kwargs) %}
@@ -518,11 +520,11 @@ def logout():
 
 
 if __name__ == '__main__':
-    ttn_full_acc_key = ""
-    ttn_username = ""
-    ttn_app_id = ""
+    ttn_full_acc_key = "NNSXS.JPEO5LHTPEOV74BBFTUSTGIKV5HJ2BFU5BD7LWI.7M6EULRBXXVR7HIC2R7VQ5CAEK4DAYXZOVZPQP3WSWEW53BER6CQ"
+    ttn_username = "peterfratzke"
+    ttn_app_id = "dev-ubg-app"
 
-    osem_access = OsemAccess("", "")
+    osem_access = OsemAccess("kermitthecreeper@gmail.com", "Abcd1234!")
     ttn_access = TtnAccess(full_account_key=ttn_full_acc_key,
         username=ttn_username
     )
