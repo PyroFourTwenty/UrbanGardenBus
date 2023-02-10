@@ -165,7 +165,7 @@ class TtnAccess():
         
         configure_device_js = requests.put(url="https://eu1.cloud.thethings.network/api/v3/js/applications/{app_id}/devices/{dev_id}".format(app_id=app_id, dev_id=dev_id), headers=headers, data=json.dumps(body))
         print('Configuration js status code:',configure_device_js.status_code)
-        return status_code, configure_device_as.status_code, configure_device_js.status_code, configure_device_ns.status_code
+        return status_code
 
     def create_new_ttn_enddevice_formatter(self, dev_id, payload_formatter_js, application_id):
         url = 'https://eu1.cloud.thethings.network/api/v3/as/applications/{application_id}/devices/{dev_id}'.format(

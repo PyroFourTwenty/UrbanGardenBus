@@ -90,18 +90,7 @@ class OsemAccess:
             pass    
         return post_new_sensebox.status_code, sensebox_id
 
-    def delete_sensebox(self, sensebox_id):
-        url = 'https://api.opensensemap.org/boxes/{sensebox_id}'.format(sensebox_id=sensebox_id)
-        headers = {
-            'content-type': 'application/json',
-            'Authorization': 'Bearer '+self.auth_token
-        }
-        body= {
-            "password" : self.password
-        }
-        return requests.delete(url=url, headers=headers,data=json.dumps(body)).status_code
-
-    def put_new_sensor(self, sensebox_id:str, icon:str, sensor_type:str, phenomenon:str, unit:str, delete_dummy_sensor= True):
+    def put_new_sensor(self, sensebox_id:str, icon:str, sensor_type:str, phenomenon:str, unit:str):
         url = 'https://api.opensensemap.org/boxes/{sensebox_id}'.format(
             sensebox_id=sensebox_id)
 
@@ -120,46 +109,14 @@ class OsemAccess:
                     "edited": True
                 }
             ]
+            
         }
 
         put_new_sensor = requests.put(
             url, headers=headers, data=json.dumps(body))
-        if delete_dummy_sensor:
-            self.delete_obligatory_first_sensor(sensebox_id=sensebox_id)
-        new_sensor_id = None
-        sensors_in_response = put_new_sensor.json()['data']['sensors'] 
-        latest_sensor = sensors_in_response[len(sensors_in_response)-1]
-        new_sensor_id = latest_sensor['_id']
-                
-        return put_new_sensor.status_code,new_sensor_id
+        self.delete_obligatory_first_sensor(sensebox_id=sensebox_id)
+        return put_new_sensor.status_code,put_new_sensor.json()['data']['_id']
 
-    def delete_sensor(self, sensebox_id, sensor_id):
-        headers = {
-            'content-type': 'application/json',
-            'Authorization': 'Bearer {auth_token}'.format(auth_token=self.auth_token)
-        }
-        delete_url = 'https://api.opensensemap.org/boxes/{sensebox_id}'.format(sensebox_id=sensebox_id)
-
-        body={
-            "sensors":[
-                {
-                    "sensorType":"delete-me",
-                    "title":"delete-me",
-                    "unit":"delete-me",
-                    "_id": sensor_id,
-                    "chart":{"yAxisTitle":"","data":[],"done":False,"error":False},"deleted":True
-                }
-            ]
-        }
-        print("Deleting sensor {sensor}  in sensebox id {sensebox} ".format(sensor=sensor_id, sensebox=sensebox_id))
-        delete_response = requests.put(delete_url, headers=headers, data=json.dumps(body))
-        if delete_response.status_code==400:
-            if "needs at least one" in delete_response.json()["message"]:
-                print("putting dummy sensor to delete the other one")
-                self.put_new_sensor(sensebox_id=sensebox_id, icon='', sensor_type='delete-me',phenomenon='delete-me',unit='delete-me', delete_dummy_sensor=False)
-        delete_response = requests.put(delete_url, headers=headers, data=json.dumps(body))
-        return delete_response.status_code
-    
     def delete_obligatory_first_sensor(self, sensebox_id):
         ''' Deletes the dummy sensor that has to be created upon sensebox creation if at least one other sensor is created '''
         headers = {
