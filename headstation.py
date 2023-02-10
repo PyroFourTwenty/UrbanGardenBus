@@ -98,7 +98,8 @@ class Headstation():
         arbit_id = 99
         sensor_model_from_db = get_model_id_of_sensor_of_node(node_id=node_id, sensor_slot=sensor_slot)
         calibration_value = get_calibration_value_for_sensor_of_node(node_id=node_id, sensor_slot=sensor_slot)
-        if not calibration_value:
+        
+        if calibration_value is None:
             print('[ HEAD ] Node {node_id} requested calibration value for sensor {sensor_model_id} on slot {sensor_slot} but no calibration value was found'.format(
             node_id=node_id, sensor_model_id=sensor_model_id, sensor_slot=sensor_slot))
 
