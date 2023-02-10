@@ -5,8 +5,6 @@ from models import User, Station, Sensor, SensorModel, CalibrationValueForSensor
 from CodeGeneration.code_generator import CodeGenerator
 from database import db
 from flask_bcrypt import Bcrypt
-import folium
-from folium.features import ClickForLatLng, ClickForMarker, LatLngPopup
 from ApiAccess.OsemAccess import OsemAccess
 from ApiAccess.TtnAccess import TtnAccess
 import json
@@ -54,6 +52,8 @@ def aerial():
 
 @app.route('/map')
 def map():
+    import folium
+    from folium.features import ClickForLatLng, ClickForMarker, LatLngPopup
     start_coords = (52.456463,13.52339)
     folium_map = folium.Map(location=start_coords, zoom_start=14, max_zoom=25)
     #tile = folium.TileLayer(
