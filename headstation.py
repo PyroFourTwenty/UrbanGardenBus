@@ -321,7 +321,7 @@ class Headstation():
     def check_sensor_values_for_station_and_send_lorawan_message(self):
         while self.running:
             copied_clients = self.connected_clients.copy()
-            timeout_per_node = copied_clients.keys()*120
+            timeout_per_node = len(copied_clients.keys())*120
             for node in copied_clients:
                 all_values_present = True
                 values = []
