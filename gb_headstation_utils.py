@@ -43,6 +43,19 @@ def get_calibration_value_for_sensor_of_node(node_id, sensor_slot ):
         except:
             pass
 
+def get_ttn_data_from_db_for_node(node_id):
+    with app.app_context():
+        try:
+            station = Station.query.filter_by(id=node_id).first() 
+            ttn_data = {
+                "app_eui" : station.ttn_enddevice_join_eui,
+                "app_key" : station.ttn_enddevice_app_key,
+                "dev_eui" : station.ttn_enddevice_dev_eui 
+            }
+            return ttn_data
+        except:
+            pass
+
 def get_model_id_of_sensor_of_node(node_id, sensor_slot):
     with app.app_context():
         try:
