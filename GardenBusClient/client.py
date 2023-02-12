@@ -25,9 +25,9 @@ class GardenBusClient():
     ttn_app_key = None
     ttn_join_eui = None
 
-    lorawan_serial = "serial-here"
+    lorawan_serial = "/dev/ttyS0"
 
-    def __init__(self, bus: can.interface.Bus, node_id: int, ttn_dev_eui:str, ttn_dev_id:str, ttn_app_key:str, ttn_join_eui:str,tick_rate: float = 30, start_looping: bool = True, print_tick_rate=True):
+    def __init__(self, bus: can.interface.Bus, node_id: int, ttn_dev_eui:str, ttn_dev_id:str, ttn_app_key:str, ttn_join_eui:str,tick_rate: float = 30, start_looping: bool = True, print_tick_rate=True, lorawan_serial='"/dev/ttyS0"'):
         self.bus = bus
         self.node_id = node_id
         self.tick_rate = tick_rate
@@ -36,7 +36,7 @@ class GardenBusClient():
         self.ttn_dev_id = ttn_dev_id 
         self.ttn_app_key = ttn_app_key 
         self.ttn_join_eui = ttn_join_eui
-        
+        self.lorawan_serial = lorawan_serial
         if print_tick_rate:
             print("[ {node_id} ] Initializing (tick rate: {tick_rate}s)".format(
                 node_id=node_id, tick_rate=tick_rate))
@@ -91,14 +91,14 @@ class GardenBusClient():
                         # the slot that the sensor was registered on
                         slot = msg.data[5]
                         self.sensors[slot] = sensor  # save the sensor
-                        sensor_name = utils.get_sensor_key_by_id(
-                            sensor.sensor_model_id)
-
+                        
                         print("[ {node} ] registration successful: {sensor}".format(
-                            node=self.node_id, sensor=sensor_name))
+                            node=self.node_id, sensor=sensor.sensor_model_id))
                         return True  # sensor was successfully registered at the headstation
                             
-        print("{node} giving up".format(node=self.node_id))
+        print("[ {node} ] giving up sensor registration of model {model} on slot {slot}".format(
+            node=self.node_id, model=sensor.sensor_model_id, slot=sensor_slot))
+        self.sensors[sensor_slot] = sensor  # save the sensor
         return False  # return False if the client was not able to register the sensor
 
     def send_unregister_sensor_packet(self, sensor_slot: int, resend_count: int = 6, response_timeout: float = 30):
@@ -164,7 +164,10 @@ class GardenBusClient():
     def handle_value_request(self, sensor_slot):
         arbit_id = 100
         # send value request ACK packet
-        print("[ {node_id} ] got value value request for slot {sensor_slot}".format(
+        print("[ {node_id} ] got value request for slot {sensor_slot}".format(
+            node_id=self.node_id, sensor_slot=sensor_slot,
+        ))
+        print("[ {node_id} ] sending value request ack for slot {sensor_slot}".format(
             node_id=self.node_id, sensor_slot=sensor_slot,
         ))
         value_request_ack_bytes = [
@@ -177,6 +180,9 @@ class GardenBusClient():
         # get actual sensor reading, this may take longer periods of time, so we send a VALUE_REQUEST_ACK packet beforehand,
         # so that the headstation knows that we got the packet but need more time to acquire the sensor reading
         sensor_value = self.sensors[sensor_slot].get_value()
+        print("[ {node_id} ] sending value reponse for slot {sensor_slot} (value is {value})".format(
+            node_id=self.node_id, sensor_slot=sensor_slot,value=sensor_value
+        ))
 
         value_response_bytes = [
             config.VALUE_RESPONSE,
@@ -199,8 +205,8 @@ class GardenBusClient():
     def leave_network(self):
         return self.send_leave_packet()
 
-    def calibrate_sensor(self, sensor: GardenBusSensor, sensor_slot):
-        return self.send_calibration_request_packet(sensor_model_id=sensor.sensor_model_id, sensor_slot=sensor_slot)
+    def calibrate_sensor(self, sensor: GardenBusSensor, sensor_slot, resend_count= 6, response_timeout= 30):
+        return self.send_calibration_request_packet(sensor_model_id=sensor.sensor_model_id, sensor_slot=sensor_slot, resend_count=resend_count, response_timeout=response_timeout)
 
     def send_lorawan_message(self):
         import numpy as np
@@ -208,17 +214,30 @@ class GardenBusClient():
         payload = ''
         for sensor_slot in sorted(self.sensors):
             sensor_value = self.sensors[sensor_slot].get_value()
-            payload = ''.join([str(hex(b)).replace('0x','') for b in np.float32(sensor_value).tobytes()])
+            partial_payload = ''.join([str(hex(b)).replace('0x','') for b in np.float32(sensor_value).tobytes()])
+            while len(partial_payload)<8:
+                partial_payload="0"+partial_payload
+            payload += partial_payload
         rak811.send_lorawan_message(message=payload,
             region='EU868',
             app_eui=self.ttn_join_eui, 
             app_key=self.ttn_app_key,
             dev_eui=self.ttn_dev_eui
         )
+        self.__last_alive=time()
 
+    def re_register_sensors(self):
+        print("[ {node} ] Re-registering all sensors because headstation reconnected".format(node=self.node_id))
+        copied = []
+        for slot in self.sensors:
+            copied.append((slot, self.sensors[slot]))
+        for copied_tuple in copied:
+            success = self.register_sensor(copied_tuple[1],copied_tuple[0])
+            if success and copied_tuple[1].calibration_required:
+                self.calibrate_sensor(copied_tuple[1], copied_tuple[0])
 
     def loop(self):
-        sleep(self.tick_rate)
+        #sleep(self.tick_rate)
         self.join_network()
         headstation_timeout_detected = False
         while self.running:
@@ -226,11 +245,9 @@ class GardenBusClient():
                 if not headstation_timeout_detected:
                     self.send_alive_packet()
                 else:
+
                     self.send_lorawan_message()
             
-            if time()-self.last_headstation_alive >= config.HEADSTATION_TICK_RATE and not headstation_timeout_detected:  # if the last alive-packet is more than the tickrate ago
-                headstation_timeout_detected = True
-                print("[ {node_id} ] Headstation timeout detected!".format(node_id=self.node_id))
 
             msg = self.bus.recv(timeout=1)  # wait for 1 second
             if msg is not None:  # handle message if one has been received
@@ -242,11 +259,19 @@ class GardenBusClient():
                     if node_id == config.HEADSTATION_NODE_ID:
                         if headstation_timeout_detected:
                             print("[ {node_id} ] headstation reconnected".format(node_id=self.node_id))
+                            headstation_timeout_detected=False
+                            self.send_leave_packet()
+                            self.send_entry_packet()
+                            self.re_register_sensors()
                         else:
                             print("[ {node_id} ] headstation is still connected".format(node_id=self.node_id))
 
                         self.last_headstation_alive = time()
                 #print(str(self.node_id), "received a packet:", msg.data[0])
+            if time()-self.last_headstation_alive >= config.HEADSTATION_TICK_RATE and not headstation_timeout_detected:  # if the last alive-packet is more than the tickrate ago
+                headstation_timeout_detected = True
+                print("[ {node_id} ] Headstation timeout detected!".format(node_id=self.node_id))
+
 
         print("[ {node_id} ] Goodbye".format(node_id=self.node_id))
         self.send_leave_packet()
