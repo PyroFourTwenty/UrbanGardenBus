@@ -2,27 +2,27 @@ import can
 from gb_headstation_utils import *
 from time import time
 from gardenbus_config import *
-from GardenBusClient.SupportedSensors import supported_sensors
 import numpy as np
 from PersistenceLayer.persistence import Persistence
 from RAK811.rak811_control import RAK811
+from threading import Thread
+
 
 class Headstation():
     connected_clients: dict = None
     bus: can.interface.Bus = None
     running: bool = False
-    nodes_sensors_calibration_data: dict = None  # has to be set before looping
     tick_rate:float = None
-    __last_alive = 0
-    node_id = 0 # headstation id should always be 0
-    db_access = None
-
-    def __init__(self, bus, db_connection_data: dict, start_looping: bool = True, nodes_sensors_calibration_data={}, tick_rate=30):
+    __last_alive:float = 0
+    node_id:int = 0 # headstation id should always be 0
+    db_access:Persistence = None
+    lorawan_serial:str = None
+    def __init__(self, bus: can.interface.Bus, persistence_object : Persistence, start_looping: bool = True, tick_rate=30, lorawan_serial="/dev/ttyUSB0"):
         self.bus = bus
-        self.db_access = Persistence(db_connection_data)
+        self.db_access = persistence_object
         self.connected_clients = {}
-        self.nodes_sensors_calibration_data = nodes_sensors_calibration_data
         self.tick_rate = float(tick_rate)
+        self.lorawan_serial=lorawan_serial
         if start_looping:
             self.loop()
     
@@ -49,7 +49,7 @@ class Headstation():
         return msg
     
     def send_entry_packet(self):
-        arbit_id = 100
+        arbit_id = 99
         bytes = [ENTRY_PACKET, *number_to_bytes(self.node_id, 2)]
         self.db_access.write_to_db({
             "packet_identifier": ENTRY_PACKET,
@@ -98,12 +98,12 @@ class Headstation():
         self.db_access.write_to_db(data)
         
 
-    def handle_node_leave(self, node_id):
+    def handle_node_leave(self, node_id:int):
         self.connected_clients.pop(node_id, None)
         print('[ HEAD ] Node {node_id} left the network'.format(
             node_id=node_id))
 
-    def handle_node_alive(self, node_id):
+    def handle_node_alive(self, node_id:int):
         data = {
             "packet_identifier": ALIVE_PACKET,
             "meta":{
@@ -126,7 +126,7 @@ class Headstation():
                 node=node_id))
         self.db_access.write_to_db(data)
 
-    def handle_sensor_registered(self, node_id: int, sensor_model_id, sensor_slot: int):
+    def handle_sensor_registered(self, node_id: int, sensor_model_id:int, sensor_slot: int):
         arbit_id = 99
         data = {
             "packet_identifier": SENSOR_REGISTER_PACKET,
@@ -170,7 +170,7 @@ class Headstation():
             node=node_id, sensor_model=sensor_model_id, slot=sensor_slot))
         self.db_access.write_to_db(data)
 
-    def handle_sensor_unregistered(self, node_id: int, sensor_slot):
+    def handle_sensor_unregistered(self, node_id: int, sensor_slot: int):
         arbit_id = 99
         if node_id in self.connected_clients:
             del self.connected_clients[node_id]["sensors"][sensor_slot]
@@ -257,7 +257,7 @@ class Headstation():
             self.handle_node_alive(node_id)
         elif packet_identifier == CALIBRATION_REQUEST:
             sensor_model_id = bytes_to_number(data[3:5])
-            sensor_slot = byte_to_number(data[5])  # something was changed here
+            sensor_slot = byte_to_number(data[5])
             self.handle_sensor_calibration_requested(
                 node_id, sensor_slot, sensor_model_id)
         elif packet_identifier == SENSOR_REGISTER_PACKET:
@@ -318,54 +318,61 @@ class Headstation():
         else:
             print("[ HEAD ] received bytes:", data)
     
-    def check_sensor_values_for_station_and_send_lorawand_message(self):
-        for node in self.connected_clients:
-            all_values_present = True
-            values = []
-            for sensor in sorted(self.connected_clients[node]["sensors"]):
-                if not "last_value" in self.connected_clients[node]["sensors"][sensor] or self.connected_clients[node]["sensors"][sensor]["last_value"] is None:
-                    all_values_present=False
-                else:
-                    values.append(self.connected_clients[node]["sensors"][sensor]["last_value"])
-            if all_values_present:
-                if len(self.connected_clients[node]["sensors"].keys())!=0:
-                    for sensor in sorted(self.connected_clients[node]["sensors"]):
-                        self.connected_clients[node]["sensors"][sensor]["last_value"] = None
-                    payload=''
-                    ttn_data = get_ttn_data_from_db_for_node(node)
-                    for value in values:
-                        stuff_to_add_to_payload= ''.join([str(hex(b)).replace('0x','') for b in np.float32(value).tobytes()]) 
-                        while len(stuff_to_add_to_payload)<8:
-                            stuff_to_add_to_payload="0"+stuff_to_add_to_payload
-                        print("stuff to add to payload",stuff_to_add_to_payload)
-                        payload += stuff_to_add_to_payload
-                    
-                    if not "last_lorawan_message" in self.connected_clients[node] or time()-self.connected_clients[node]["last_lorawan_message"] >= 120:
-                        print("[ HEAD ] all values present for node {node}, sending payload to TTN: {payload}".format(
-                            node=node, payload=payload
-                        ))
-                        print("sending to TTN")
-                        RAK811('/dev/ttyUSB0').send_lorawan_message(message=payload,
-                            region='EU868',
-                            app_eui = ttn_data["app_eui"],
-                            app_key = ttn_data["app_key"],
-                            dev_eui = ttn_data["dev_eui"]
-                        )
-                        self.db_access.write_to_db({
-                                "packet_identifier": "lorawan",
-                                "meta":{
-                                    "node_id": node,
-                                    "packet_direction": "outgoing"
-                                }
-                        })
-                        self.connected_clients[node]["last_lorawan_message"]=time()
-                else:
-                    print("station has no sensor ")
+    def check_sensor_values_for_station_and_send_lorawan_message(self):
+        while self.running:
+            copied_clients = self.connected_clients.copy()
+            timeout_per_node = copied_clients.keys()*120
+            for node in copied_clients:
+                all_values_present = True
+                values = []
+                for sensor in sorted(copied_clients[node]["sensors"]):
+                    if not "last_value" in self.connected_clients[node]["sensors"][sensor] or self.connected_clients[node]["sensors"][sensor]["last_value"] is None:
+                        all_values_present=False
+                    else:
+                        values.append(self.connected_clients[node]["sensors"][sensor]["last_value"])
+                if all_values_present:
+                    if len(self.connected_clients[node]["sensors"].keys())!=0:
+                        for sensor in sorted(self.connected_clients[node]["sensors"]):
+                            self.connected_clients[node]["sensors"][sensor]["last_value"] = None
+                        payload=''
+                        ttn_data = get_ttn_data_from_db_for_node(node)
+                        for value in values:
+                            stuff_to_add_to_payload= ''.join([str(hex(b)).replace('0x','') for b in np.float32(value).tobytes()]) 
+                            while len(stuff_to_add_to_payload)<8:
+                                stuff_to_add_to_payload="0"+stuff_to_add_to_payload
+                            payload += stuff_to_add_to_payload
 
+                        if not "last_lorawan_message" in self.connected_clients[node] or time()-self.connected_clients[node]["last_lorawan_message"] >= timeout_per_node:
+                            if ttn_data is None:
+                                print("[ HEAD ] Node {node} is not correctly registered, so no TTN data was found".format(node=node))
+                                self.connected_clients[node]["last_lorawan_message"]=time()
+                            else:
+                                print("[ HEAD ] All values present for node {node}, sending payload to TTN: {payload}".format(
+                                    node=node, payload=payload
+                                ))
+                                print("sending to TTN")
+                                RAK811(self.lorawan_serial).send_lorawan_message(message=payload,
+                                    region='EU868',
+                                    app_eui = ttn_data["app_eui"],
+                                    app_key = ttn_data["app_key"],
+                                    dev_eui = ttn_data["dev_eui"]
+                                )
+                                self.db_access.write_to_db({
+                                        "packet_identifier": "lorawan",
+                                        "meta":{
+                                            "node_id": node,
+                                            "packet_direction": "outgoing"
+                                        }
+                                })
+                                self.connected_clients[node]["last_lorawan_message"]=time()
+                                self.send_alive_packet()
 
 
     def loop(self):
         self.running = True
+        value_checker = Thread(target=self.check_sensor_values_for_station_and_send_lorawan_message, args=(), daemon=True)
+        print("[ HEAD ] starting value checker")
+        value_checker.start()
         print("[ HEAD ] starting to loop")
         self.send_entry_packet()
         while self.running:
@@ -378,7 +385,6 @@ class Headstation():
             msg = self.bus.recv(timeout=.1)
             if msg is not None:
                 self.parse_packet(msg.data)
-            self.check_sensor_values_for_station_and_send_lorawand_message()
         print("[ HEAD ] ending service loop, waiting for {count} clients to disconnect".format(
             count=len(self.connected_clients.keys())))
         while len(self.connected_clients.keys()) != 0:
