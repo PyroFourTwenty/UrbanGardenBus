@@ -1,7 +1,7 @@
-from influxdb_client import InfluxDBClient, Point,BucketRetentionRules
+from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
-class Persistence():
 
+class Persistence():
     client = None
     connection_data = {}
     def __init__(self,connection_data):
@@ -14,15 +14,6 @@ class Persistence():
             token=self.connection_data["token"],
             org= self.connection_data["org"],
             debug=self.connection_data["debug"],
-        )
-
-    def create_table(self, table_name):
-        buckets_api = self.client.buckets_api()
-        retention_rules = BucketRetentionRules(type="expire", every_seconds=86400)
-        buckets_api.create_bucket(
-            bucket_name=table_name,
-            retention_rules=retention_rules,
-            org=self.connection_data["org"]
         )
 
     def write_to_db(self, data:dict):

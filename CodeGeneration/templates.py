@@ -79,7 +79,7 @@ def get_value_for_{{sensor.sensor_name_in_snakecase}}_on_slot_{{sensor.slot}}():
 {% if sensor.needs_calibration %}def apply_calibration_value_for_{{sensor.sensor_name_in_snakecase}}_on_slot_{{sensor.slot}}(value, calibration_value):
     value += calibration_value
     # you can do further value processing here
-    # i.e. you can convert a value reading to a percentage using this 
+    # i.e. you can convert a value reading to a percentage
     return value
 {% endif %}{% endfor %}
 if __name__=='__main__':
@@ -104,7 +104,8 @@ if __name__=='__main__':
         sensor_model_id = {{sensor.model_id}},
         get_value_function=get_value_for_{{sensor.sensor_name_in_snakecase}}_on_slot_{{sensor.slot}}{% if sensor.needs_calibration %},
         calibration_required=True,
-        calibration_function=apply_calibration_value_for_{{sensor.sensor_name_in_snakecase}}_on_slot_{{sensor.slot}}
+        calibration_function=apply_calibration_value_for_{{sensor.sensor_name_in_snakecase}}_on_slot_{{sensor.slot}},
+        calibration_value={{sensor.calibration_value}}
     {% endif %})
 
     register_success = client.register_sensor(
