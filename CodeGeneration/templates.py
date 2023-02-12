@@ -103,6 +103,7 @@ if __name__=='__main__':
     {{sensor.sensor_name_in_snakecase}}_on_slot_{{sensor.slot}} = GardenBusSensor(
         sensor_model_id = {{sensor.model_id}},
         get_value_function=get_value_for_{{sensor.sensor_name_in_snakecase}}_on_slot_{{sensor.slot}}{% if sensor.needs_calibration %},
+        calibration_required=True,
         calibration_function=apply_calibration_value_for_{{sensor.sensor_name_in_snakecase}}_on_slot_{{sensor.slot}}
     {% endif %})
 
@@ -115,6 +116,7 @@ if __name__=='__main__':
     calibration_success = client.calibrate_sensor({{sensor.sensor_name_in_snakecase}}_on_slot_{{sensor.slot}},{{sensor.slot}})  
     {% endif %}
     {%endfor%}
+    client.loop() # start the (blocking) loop function of our client and let it do its thing! 
     """
 
 ttn_payload_formatter_template = """
