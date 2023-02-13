@@ -1,13 +1,14 @@
 import requests
 import json
-
+from time import time
 
 class OsemAccess:
     email: str = ''
     password: str = ''
     auth_token = ''
     refresh_token = ''
-
+    last_sign_in = None
+    refresh_sign_in_after_seconds = 10*60 # 10 minutes
     def __init__(self, email: str = '', password: str = ''):
         self.email = email
         self.password = password
@@ -24,11 +25,17 @@ class OsemAccess:
         if r.status_code == 200:
             self.auth_token = r.json()["token"]
             self.refresh_token = r.json()["refreshToken"]
+            self.last_sign_in = time()
         else:
             raise Exception("OsemAccess: OpenSenseMap login credentials seem to be invalid")
         return r.status_code == 200
+    
+    def check_last_sign_in(self):
+        if time()-self.last_sign_in>=self.refresh_sign_in_after_seconds:
+            self.sign_in()
 
     def get_available_senseboxes(self):
+        self.check_last_sign_in()
         sensebox_names = []
         headers = {
             'content-type': 'application/json',
@@ -43,6 +50,7 @@ class OsemAccess:
         return sensebox_names
 
     def get_sensor_ids_of_sensebox(self, sensebox_id):
+        self.check_last_sign_in()
         sensor_ids = []
         headers = {
             'content-type': 'application/json',
@@ -57,6 +65,7 @@ class OsemAccess:
         return sensor_ids
         
     def post_new_sensebox(self, sensebox_name, ttn_dev_id, ttn_app_id, lat=52.4564629, lng=13.5233899, height=36):
+        self.check_last_sign_in()
         url = 'https://api.opensensemap.org/boxes'
         headers = {
             'content-type': 'application/json',
@@ -69,9 +78,9 @@ class OsemAccess:
             'location': {"lat": lat, "lng": lng, "height": height},
             'sensors': [{
                 "id": 0,
-		        "sensorType": "delete-me",
-		        "title": "delete-me",
-		        "unit": "delete-me"
+                "sensorType": "delete-me",
+                "title": "delete-me",
+                "unit": "delete-me"
             }],
             'ttn': {
                 'dev_id': ttn_dev_id,
@@ -91,6 +100,7 @@ class OsemAccess:
         return post_new_sensebox.status_code, sensebox_id
 
     def delete_sensebox(self, sensebox_id):
+        self.check_last_sign_in()
         url = 'https://api.opensensemap.org/boxes/{sensebox_id}'.format(sensebox_id=sensebox_id)
         headers = {
             'content-type': 'application/json',
@@ -102,6 +112,7 @@ class OsemAccess:
         return requests.delete(url=url, headers=headers,data=json.dumps(body)).status_code
 
     def put_new_sensor(self, sensebox_id:str, icon:str, sensor_type:str, phenomenon:str, unit:str, delete_dummy_sensor= True):
+        self.check_last_sign_in()
         url = 'https://api.opensensemap.org/boxes/{sensebox_id}'.format(
             sensebox_id=sensebox_id)
 
@@ -134,6 +145,7 @@ class OsemAccess:
         return put_new_sensor.status_code,new_sensor_id
 
     def delete_sensor(self, sensebox_id, sensor_id):
+        self.check_last_sign_in()
         headers = {
             'content-type': 'application/json',
             'Authorization': 'Bearer {auth_token}'.format(auth_token=self.auth_token)
@@ -162,6 +174,7 @@ class OsemAccess:
     
     def delete_obligatory_first_sensor(self, sensebox_id):
         ''' Deletes the dummy sensor that has to be created upon sensebox creation if at least one other sensor is created '''
+        self.check_last_sign_in()
         headers = {
             'content-type': 'application/json',
             'Authorization': 'Bearer {auth_token}'.format(auth_token=self.auth_token)
