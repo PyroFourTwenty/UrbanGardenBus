@@ -10,6 +10,7 @@ from threading import Thread
 
 class Headstation():
     connected_clients: dict = None
+    partial_transfers: dict = None
     bus: can.interface.Bus = None
     running: bool = False
     tick_rate:float = None
@@ -21,6 +22,7 @@ class Headstation():
         self.bus = bus
         self.db_access = persistence_object
         self.connected_clients = {}
+        self.partial_transfers = {}
         self.tick_rate = float(tick_rate)
         self.lorawan_serial=lorawan_serial
         if start_looping:
@@ -245,6 +247,39 @@ class Headstation():
                                     node_id=node_id, sensor_slot=sensor_slot))
                                 return True
             return False
+        
+    def handle_partial_transfer_id_request(self, node_id, length):
+        transfer_id = 255
+        self.partial_transfers[transfer_id]= {
+            "node_id": node_id,
+            "length": length,
+            "content": []
+        }
+        partial_transfer_id_response_bytes = [
+            PARTIAL_TRANSFER_ID_RESPONSE,
+            *number_to_bytes(node_id, 2),
+            *number_to_bytes(transfer_id),
+        ]
+        self.send_packet(bytes=partial_transfer_id_response_bytes, arbitration_id=99)
+
+    def handle_partial_transfer(self, transfer_id, part_identifier, content):
+        count_of_bytes_per_part = 4
+        current_length = len(self.partial_transfers[transfer_id]["content"])/count_of_bytes_per_part
+        if part_identifier == current_length:
+            
+            for byte in content:
+                self.partial_transfers[transfer_id]["content"].append(byte) # append tuple
+            
+            print("[ HEAD ] received partial content ",content)
+
+            partial_transfer_ack_bytes = [
+                PARTIAL_TRANSFER_ACK,
+                *number_to_bytes(transfer_id),
+                *number_to_bytes(part_identifier, 3)
+            ]
+            self.send_packet(bytes=partial_transfer_ack_bytes, arbitration_id=99)
+        else:
+            print("[ HEAD ] part-id {part_id} doesnt equal content len {length}".format(part_id=part_identifier, length=current_length))
 
     def parse_packet(self, data: list):
         packet_identifier = data[0]
@@ -314,6 +349,16 @@ class Headstation():
                     self.connected_clients[node_id]["sensors"][slot]["last_value"] = value
             print("[ HEAD ] Node {node_id} has responded to the value request on slot {slot} (value is {value})".format(
                 node_id=node_id, slot=slot, value=value))
+        elif packet_identifier == PARTIAL_TRANSFER_ID_REQUEST:
+            node_id = bytes_to_number(data[1:3])
+            length = bytes_to_number(data[3:6])
+            print("[ HEAD ] partial transfer request from node {node_id} with length {length}".format(node_id=node_id, length=length))
+            self.handle_partial_transfer_id_request(node_id, length)
+        elif packet_identifier == PARTIAL_TRANSFER:
+            transfer_id = data[1]
+            part_identifier = bytes_to_number(data[2:5])
+            content = data[5:9]
+            self.handle_partial_transfer(transfer_id, part_identifier, content)
 
         else:
             print("[ HEAD ] received bytes:", data)
