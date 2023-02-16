@@ -1,7 +1,9 @@
 python-can
 numpy
+requests
 folium
 flask
+Jinja2
 flask_sqlalchemy
 flask_login
 bcrypt<4.0.0
