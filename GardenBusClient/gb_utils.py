@@ -1,4 +1,3 @@
-from GardenBusClient import sensor
 from GardenBusClient.SupportedSensors import supported_sensors
 
 
