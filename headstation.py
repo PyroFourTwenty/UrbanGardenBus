@@ -6,6 +6,7 @@ import numpy as np
 from PersistenceLayer.persistence import Persistence
 from RAK811.rak811_control import RAK811
 from threading import Thread
+import random
 
 
 class Headstation():
@@ -251,27 +252,32 @@ class Headstation():
             return False
 
     def handle_partial_transfer_id_request(self, node_id, length):
-        transfer_id = 255
-        self.partial_transfers[transfer_id] = {
-            "node_id": node_id,
-            "length": length,
-            "content": [],
-
-        }
-        partial_transfer_id_response_bytes = [
-            PARTIAL_TRANSFER_ID_RESPONSE,
-            *number_to_bytes(node_id, 2),
-            *number_to_bytes(transfer_id),
-        ]
-        self.send_packet(
-            bytes=partial_transfer_id_response_bytes, arbitration_id=99)
+        transfer_id = random.randrange(0,256)
+        if len(self.partial_transfers.keys())<256: # if partial transfers are not at capacity
+            while transfer_id in self.partial_transfers:
+                transfer_id = random.randrange(0,256)
+            self.partial_transfers[transfer_id] = {
+                "node_id": node_id,
+                "length": length,
+                "content": [],
+            }
+            partial_transfer_id_response_bytes = [
+                PARTIAL_TRANSFER_ID_RESPONSE,
+                *number_to_bytes(node_id, 2),
+                *number_to_bytes(transfer_id),
+            ]
+            self.send_packet(
+                bytes=partial_transfer_id_response_bytes, arbitration_id=99)
+        else:
+            # partial transfer are at capacity, maybe let the client know that?
+            pass
 
     def handle_partial_transfer(self, transfer_id, part_identifier, content):
         count_of_bytes_per_part = 4
         current_length = len(
             self.partial_transfers[transfer_id]["content"])/count_of_bytes_per_part
         if part_identifier == 0:
-            print("initializing and setting timestampt")
+            print("[HEAD] transfer {transfer_id} started".format(transfer_id=transfer_id))
             self.partial_transfers[transfer_id]["start_timestamp"] = time()
         if part_identifier == current_length:
 
@@ -279,7 +285,13 @@ class Headstation():
                 self.partial_transfers[transfer_id]["content"].append(
                     byte)  # append tuple
             percentage = current_length/self.partial_transfers[transfer_id]["length"]*100
-            print("[ HEAD ] {percentage}  ".format(percentage=percentage))
+            percentage = round(percentage,2)
+            time_difference = time()-self.partial_transfers[transfer_id]["start_timestamp"]
+            speed = 0
+            if time_difference!=0:
+                speed = len(self.partial_transfers[transfer_id]["content"])/(time()-self.partial_transfers[transfer_id]["start_timestamp"])
+            speed = round(speed, 1)
+            print("[ HEAD ]\t{percentage} % \t@ {speed} b/s".format(percentage=percentage, speed=speed))
 
             partial_transfer_ack_bytes = [
                 PARTIAL_TRANSFER_ACK,
@@ -303,13 +315,9 @@ class Headstation():
         for int in content:
             file_content+=chr(int)
         
-
-
-        #print(content.decode("utf-8"))
-            #for character in pair:
-            #    print(character)
-            #    file_content+=character
-        paste_me = open('new_headstation.py','wb')
+        filename = self.partial_transfers[transfer_id]["meta"]["filename"]
+        filename="im_copied_btw_"+filename
+        paste_me = open(filename,'wb')
         paste_me.write(bytes(content))
         print("[ HEAD ] partial transfer {transfer_id} completed".format(transfer_id=transfer_id))
         self.partial_transfers[transfer_id]["finished_timestamp"] = time()
@@ -317,9 +325,37 @@ class Headstation():
         print("[ HEAD ] took {duration} seconds".format(duration=duration)) 
 
     def handle_partial_transfer_name_init(self, transfer_id, name_length):
-        pass
+        self.partial_transfers[transfer_id]["meta"]={
+            "length" : name_length,
+            "filename": "",
+            "filename_transfer_finised" : False
+        }
+        partial_transfer_name_init_ack_bytes = [
+            PARTIAL_TRANSFER_NAME_INIT_ACK,
+            transfer_id,
+            name_length
+        ]
+        self.send_packet(arbitration_id=99, bytes=partial_transfer_name_init_ack_bytes)
 
-    def hand_partial_transfer_name_part(self, )
+    def handle_partial_transfer_name_part(self, transfer_id, partial_file_name):
+        for byte in partial_file_name:
+            self.partial_transfers[transfer_id]["meta"]["filename"]+=chr(byte)
+        filename=self.partial_transfers[transfer_id]["meta"]["filename"]
+        current_length=len(filename)        
+        partial_name_part_ack_bytes = [
+            PARTIAL_TRANSFER_NAME_PART_ACK,
+            transfer_id,
+            *partial_file_name
+        ] 
+        self.send_packet(arbitration_id=100, bytes=partial_name_part_ack_bytes)
+
+        if current_length == self.partial_transfers[transfer_id]["meta"]["length"]:
+            self.partial_transfers[transfer_id]["meta"]["filename_transfer_finished"]=True
+            print("[ HEAD ] Filename transfer finished for transfer {transfer_id} ({filename}) ".format(filename=filename, transfer_id=transfer_id))
+
+#    def handle_partial_transfer_name_finised(self, transfer_id):
+
+
 
     def parse_packet(self, data: list):
         packet_identifier = data[0]
@@ -400,11 +436,14 @@ class Headstation():
         elif packet_identifier == PARTIAL_TRANSFER_NAME_INIT:
             transfer_id = data[1]
             name_length = data[2]
+            print("[ HEAD ] partial transfer name init for tansfer id {transfer_id} with length {length}".format(
+                transfer_id=transfer_id, length=name_length))
+            
             self.handle_partial_transfer_name_init(transfer_id, name_length)
         
         elif packet_identifier == PARTIAL_TRANSFER_NAME_PART:
             transfer_id = data[1]
-            partial_file_name = data[2:8]
+            partial_file_name = data[3:8]
             self.handle_partial_transfer_name_part(transfer_id, partial_file_name)
 
 
