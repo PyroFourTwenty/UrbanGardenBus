@@ -244,7 +244,7 @@ class GardenBusClient():
         with open(filename, "rb") as f:
             while(byte:=f.read(1)):
                 data.append(int.from_bytes(byte,"big"))
-        count_of_bytes_per_part = 4
+        count_of_bytes_per_part = 3
         length = math.ceil(len(data)/count_of_bytes_per_part)
 
         value_request_bytes = [
@@ -272,7 +272,7 @@ class GardenBusClient():
             "length": None,
             "ready_for_tx": False,
             "last_index" : None,
-            "finished": False
+            "finished": False,
         }
 
     def handle_transfer_id(self, node_id, transfer_id):
@@ -309,7 +309,7 @@ class GardenBusClient():
             self.partial_transfer["ready_for_tx"] = True
 
     def send_partial_data_packet(self):
-        count_of_bytes_per_part = 4
+        count_of_bytes_per_part = 3
         if self.partial_transfer["ready_for_tx"] and not self.partial_transfer["finished"]:
             if self.partial_transfer["last_index"] is None:
                 self.partial_transfer["last_index"] = 0
@@ -322,10 +322,16 @@ class GardenBusClient():
                 *self.partial_transfer["data"][index_low:index_high]
             ]
             self.send_packet(arbitration_id=100, bytes=partial_transfer_bytes)
-            self.partial_transfer["last_index"]+=1
 
             if self.partial_transfer["last_index"] == self.partial_transfer["length"]:
                 self.partial_transfer["finished"] = True
+
+    def handle_partial_transfer_ack(self, part_identifier):
+        if part_identifier == self.partial_transfer["last_index"]:
+            self.partial_transfer["last_index"]+=1
+            print("Recipient confirmed part number {part}".format(part=part_identifier))
+
+
 
     def send_part_transfer_finished_packet(self):
         partial_transfer_finished_bytes = [
@@ -386,6 +392,13 @@ class GardenBusClient():
                 elif msg.data[0] == config.PARTIAL_TRANSFER_NAME_INIT_ACK:
                     transfer_id=msg.data[1]
                     self.handle_name_init_ack(transfer_id=transfer_id)
+                elif msg.data[0] == config.PARTIAL_TRANSFER_ACK:
+                    transfer_id=msg.data[1]
+                    if transfer_id == self.partial_transfer["transfer_id"]:
+                        part_identifier = utils.bytes_to_number(msg.data[2:5])
+                        self.handle_partial_transfer_ack(part_identifier)
+
+
                 #print(str(self.node_id), "received a packet:", msg.data[0])
             if time()-self.last_headstation_alive >= config.HEADSTATION_TICK_RATE and not headstation_timeout_detected:  # if the last alive-packet is more than the tickrate ago
                 headstation_timeout_detected = True
