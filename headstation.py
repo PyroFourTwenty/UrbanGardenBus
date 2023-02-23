@@ -49,7 +49,10 @@ class Headstation():
 
     def send_packet(self, arbitration_id, bytes: list):
         msg = can.Message(arbitration_id=arbitration_id, data=bytes)
-        self.bus.send(msg)
+        try:
+            self.bus.send(msg)
+        except can.exceptions.CanOperationError:
+            self.bus.flush_tx_buffer()
         return msg
 
     def send_entry_packet(self):
@@ -268,16 +271,27 @@ class Headstation():
             ]
             self.send_packet(
                 bytes=partial_transfer_id_response_bytes, arbitration_id=99)
+            self.db_access.write_to_db({
+                "packet_identifier": PARTIAL_TRANSFER_ID_RESPONSE,
+                "meta": {
+                    "node_id": node_id,
+                    "packet_direction": "outgoing",
+                    "length": length,
+                    "transfer_id": transfer_id
+                }
+            })
         else:
             # partial transfer are at capacity, maybe let the client know that?
             pass
 
     def handle_partial_transfer(self, transfer_id, part_identifier, content):
-        count_of_bytes_per_part = 4
+        if not transfer_id in self.partial_transfers:
+            return
+        count_of_bytes_per_part = 3
         current_length = len(
             self.partial_transfers[transfer_id]["content"])/count_of_bytes_per_part
         if part_identifier == 0:
-            print("[HEAD] transfer {transfer_id} started".format(transfer_id=transfer_id))
+            print("[ HEAD ] transfer {transfer_id} started".format(transfer_id=transfer_id))
             self.partial_transfers[transfer_id]["start_timestamp"] = time()
         if part_identifier == current_length:
 
@@ -288,10 +302,15 @@ class Headstation():
             percentage = round(percentage,2)
             time_difference = time()-self.partial_transfers[transfer_id]["start_timestamp"]
             speed = 0
-            if time_difference!=0:
+            remaining_seconds = "a few"
+            if time_difference!=0 and percentage!=0:
                 speed = len(self.partial_transfers[transfer_id]["content"])/(time()-self.partial_transfers[transfer_id]["start_timestamp"])
+                remaining_percentage = 100.0-percentage
+                factor = remaining_percentage/percentage
+                remaining_seconds = round(time_difference * factor,2)
             speed = round(speed, 1)
-            print("[ HEAD ]\t{percentage} % \t@ {speed} b/s".format(percentage=percentage, speed=speed))
+            print("[ HEAD ]\t{percentage} % \t\t @ {speed} b/s\t current_length={current} \t length={length} \t remaining: {remaining} s".format(percentage=percentage, speed=speed,
+                                                                                                                 current=current_length,length=self.partial_transfers[transfer_id]["length"], remaining=remaining_seconds))
 
             partial_transfer_ack_bytes = [
                 PARTIAL_TRANSFER_ACK,
@@ -300,6 +319,16 @@ class Headstation():
             ]
             self.send_packet(bytes=partial_transfer_ack_bytes,
                             arbitration_id=99)
+            node_id = self.partial_transfers[transfer_id]["node_id"]
+            self.db_access.write_to_db({
+                "packet_identifier": PARTIAL_TRANSFER_ACK,
+                "meta": {
+                    "node_id": node_id,
+                    "packet_direction": "outgoing",
+                    "transfer_id": transfer_id,
+                    "part_identifier": part_identifier
+                }
+            })
         else:
             print("[ HEAD ] part-id {part_id} doesnt equal content len {length}".format(
                 part_id=part_identifier, length=current_length))
@@ -309,7 +338,17 @@ class Headstation():
             PARTIAL_TRANSFER_FINISHED_ACK,
             transfer_id
         ]
+        node_id = self.partial_transfers[transfer_id]["node_id"]
+
         self.send_packet(bytes=partial_transfer_ack_bytes, arbitration_id=99)
+        self.db_access.write_to_db({
+                "packet_identifier": PARTIAL_TRANSFER_FINISHED_ACK,
+                "meta": {
+                    "node_id": node_id,
+                    "packet_direction": "outgoing",
+                    "transfer_id": transfer_id
+                }
+        })
         content = self.partial_transfers[transfer_id]["content"]
         file_content=""
         for int in content:
@@ -319,16 +358,18 @@ class Headstation():
         filename="im_copied_btw_"+filename
         paste_me = open(filename,'wb')
         paste_me.write(bytes(content))
-        print("[ HEAD ] partial transfer {transfer_id} completed".format(transfer_id=transfer_id))
         self.partial_transfers[transfer_id]["finished_timestamp"] = time()
         duration = self.partial_transfers[transfer_id]["finished_timestamp"]-self.partial_transfers[transfer_id]["start_timestamp"]
-        print("[ HEAD ] took {duration} seconds".format(duration=duration)) 
+        duration = round(duration,2)
+        speed = round(len(content)/duration, 2)
+        print("[ HEAD ] transfer {transfer_id} completed in {duration}s ({speed} b/s)".format(transfer_id=transfer_id, duration=duration, speed=speed))
+        self.partial_transfers.pop(transfer_id)
 
     def handle_partial_transfer_name_init(self, transfer_id, name_length):
         self.partial_transfers[transfer_id]["meta"]={
             "length" : name_length,
             "filename": "",
-            "filename_transfer_finised" : False
+            "filename_transfer_finished" : False
         }
         partial_transfer_name_init_ack_bytes = [
             PARTIAL_TRANSFER_NAME_INIT_ACK,
@@ -336,6 +377,15 @@ class Headstation():
             name_length
         ]
         self.send_packet(arbitration_id=99, bytes=partial_transfer_name_init_ack_bytes)
+        node_id = self.partial_transfers[transfer_id]["node_id"]
+        self.db_access.write_to_db({
+            "packet_identifier": PARTIAL_TRANSFER_NAME_INIT_ACK,
+            "meta": {
+                "node_id": node_id,
+                "packet_direction": "outgoing",
+                "transfer_id": transfer_id
+            }
+        })
 
     def handle_partial_transfer_name_part(self, transfer_id, partial_file_name):
         for byte in partial_file_name:
@@ -346,14 +396,24 @@ class Headstation():
             PARTIAL_TRANSFER_NAME_PART_ACK,
             transfer_id,
             *partial_file_name
-        ] 
+        ]
+        
         self.send_packet(arbitration_id=100, bytes=partial_name_part_ack_bytes)
+        node_id = self.partial_transfers[transfer_id]["node_id"]
+
+        self.db_access.write_to_db({
+            "packet_identifier": PARTIAL_TRANSFER_NAME_PART_ACK,
+            "meta": {
+                "node_id": node_id,
+                "packet_direction": "outgoing",
+                "transfer_id": transfer_id
+            }
+        })
 
         if current_length == self.partial_transfers[transfer_id]["meta"]["length"]:
             self.partial_transfers[transfer_id]["meta"]["filename_transfer_finished"]=True
             print("[ HEAD ] Filename transfer finished for transfer {transfer_id} ({filename}) ".format(filename=filename, transfer_id=transfer_id))
 
-#    def handle_partial_transfer_name_finised(self, transfer_id):
 
 
 
@@ -428,9 +488,17 @@ class Headstation():
         
         elif packet_identifier == PARTIAL_TRANSFER_ID_REQUEST:
             node_id = bytes_to_number(data[1:3])
-            length = bytes_to_number(data[4:6])
+            length = bytes_to_number(data[3:6])
             print("[ HEAD ] partial transfer request from node {node_id} with length {length}".format(
                 node_id=node_id, length=length))
+            self.db_access.write_to_db({
+                "packet_identifier": PARTIAL_TRANSFER_ID_REQUEST,
+                "meta": {
+                    "node_id": node_id,
+                    "packet_direction": "ingoing",
+                    "length": length
+                }
+            })
             self.handle_partial_transfer_id_request(node_id, length)
         
         elif packet_identifier == PARTIAL_TRANSFER_NAME_INIT:
@@ -438,12 +506,29 @@ class Headstation():
             name_length = data[2]
             print("[ HEAD ] partial transfer name init for tansfer id {transfer_id} with length {length}".format(
                 transfer_id=transfer_id, length=name_length))
-            
+            node_id = self.partial_transfers[transfer_id]["node_id"]
+            self.db_access.write_to_db({
+                "packet_identifier": PARTIAL_TRANSFER_NAME_INIT,
+                "meta": {
+                    "node_id": node_id,
+                    "packet_direction": "ingoing",
+                    "name_length": name_length,
+                    "transfer_id": transfer_id
+                }
+            })
             self.handle_partial_transfer_name_init(transfer_id, name_length)
         
         elif packet_identifier == PARTIAL_TRANSFER_NAME_PART:
             transfer_id = data[1]
             partial_file_name = data[3:8]
+            self.db_access.write_to_db({
+                "packet_identifier": PARTIAL_TRANSFER_NAME_PART,
+                "meta": {
+                    "node_id": node_id,
+                    "packet_direction": "ingoing",
+                    "transfer_id": transfer_id
+                }
+            })
             self.handle_partial_transfer_name_part(transfer_id, partial_file_name)
 
 
@@ -451,10 +536,29 @@ class Headstation():
             transfer_id = data[1]
             part_identifier = bytes_to_number(data[2:5])
             content = data[5:9]
+            node_id = self.partial_transfers[transfer_id]["node_id"]
+            self.db_access.write_to_db({
+                "packet_identifier": PARTIAL_TRANSFER,
+                "meta": {
+                    "node_id": node_id,
+                    "packet_direction": "ingoing",
+                    "transfer_id": transfer_id,
+                    "part_identifier": part_identifier
+                }
+            })
             self.handle_partial_transfer(transfer_id, part_identifier, content)
         elif packet_identifier == PARTIAL_TRANSFER_FINISHED:
             transfer_id = data[1]
+            node_id = self.partial_transfers[transfer_id]["node_id"]
             self.handle_partial_transfer_finished(transfer_id)
+            self.db_access.write_to_db({
+                "packet_identifier": PARTIAL_TRANSFER_FINISHED,
+                "meta": {
+                    "node_id": node_id,
+                    "packet_direction": "ingoing",
+                    "transfer_id": transfer_id,
+                }
+            })
 
         else:
             print("[ HEAD ] received bytes:", data)
