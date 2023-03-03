@@ -19,14 +19,22 @@ class Headstation():
     node_id: int = 0  # headstation id should always be 0
     db_access: Persistence = None
     lorawan_serial: str = None
+    forward_data_to_ttn = None
 
-    def __init__(self, bus: can.interface.Bus, persistence_object: Persistence, start_looping: bool = True, tick_rate=30, lorawan_serial="/dev/ttyUSB0"):
+    def __init__(self, 
+                    bus: can.interface.Bus, 
+                    persistence_object: Persistence,
+                    start_looping: bool = True,
+                    tick_rate=30,
+                    lorawan_serial="/dev/ttyUSB0",
+                    forward_data_to_ttn: bool = True):
         self.bus = bus
         self.db_access = persistence_object
         self.connected_clients = {}
         self.partial_transfers = {}
         self.tick_rate = float(tick_rate)
         self.lorawan_serial = lorawan_serial
+        self.forward_data_to_ttn=forward_data_to_ttn
         if start_looping:
             self.loop()
 
@@ -330,8 +338,8 @@ class Headstation():
                 }
             })
         else:
-            print("[ HEAD ] part-id {part_id} doesnt equal content len {length}".format(
-                part_id=part_identifier, length=current_length))
+            print("[ HEAD ] [{transfer}] part-id {part_id} doesnt equal content len {length}".format(
+                part_id=part_identifier, length=current_length, transfer=transfer_id))
 
     def handle_partial_transfer_finished(self, transfer_id):
         partial_transfer_ack_bytes = [
@@ -378,6 +386,7 @@ class Headstation():
         ]
         self.send_packet(arbitration_id=99, bytes=partial_transfer_name_init_ack_bytes)
         node_id = self.partial_transfers[transfer_id]["node_id"]
+        print("[ HEAD ] sending name init ack to node {node}".format(node=node_id))
         self.db_access.write_to_db({
             "packet_identifier": PARTIAL_TRANSFER_NAME_INIT_ACK,
             "meta": {
@@ -576,7 +585,7 @@ class Headstation():
                     else:
                         values.append(
                             self.connected_clients[node]["sensors"][sensor]["last_value"])
-                if all_values_present:
+                if all_values_present and self.forward_data_to_ttn:
                     if len(self.connected_clients[node]["sensors"].keys()) != 0:
                         for sensor in sorted(self.connected_clients[node]["sensors"]):
                             self.connected_clients[node]["sensors"][sensor]["last_value"] = None
@@ -597,9 +606,8 @@ class Headstation():
                                 )
                             else:
                                 print("[ HEAD ] All values present for node {node}, sending payload to TTN: {payload}".format(
-                                    node=node, payload=payload
+                                    node=node, 
                                 ))
-                                print("sending to TTN")
                                 RAK811(self.lorawan_serial).send_lorawan_message(message=payload,
                                                                                  region='EU868',
                                                                                  app_eui=ttn_data["app_eui"],
