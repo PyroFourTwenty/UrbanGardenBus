@@ -29,7 +29,7 @@ class GardenBusClient():
 
     lorawan_serial = "/dev/ttyS0"
 
-    def __init__(self, bus: can.interface.Bus, node_id: int, ttn_dev_eui:str, ttn_dev_id:str, ttn_app_key:str, ttn_join_eui:str,tick_rate: float = 30, start_looping: bool = True, print_tick_rate=True, lorawan_serial='"/dev/ttyS0"'):
+    def __init__(self, bus: can.interface.Bus, node_id: int, ttn_dev_eui:str = "", ttn_dev_id:str="", ttn_app_key:str="", ttn_join_eui:str="",tick_rate: float = 30, start_looping: bool = True, print_tick_rate=True, lorawan_serial='"/dev/ttyS0"', forward_data_to_ttn: bool = True):
         self.bus = bus
         self.node_id = node_id
         self.tick_rate = tick_rate
@@ -40,6 +40,7 @@ class GardenBusClient():
         self.ttn_join_eui = ttn_join_eui
         self.lorawan_serial = lorawan_serial
         self.reset_partial_transfer()
+        self.forward_data_to_ttn = forward_data_to_ttn
         if print_tick_rate:
             print("[ {node_id} ] Initializing (tick rate: {tick_rate}s)".format(
                 node_id=node_id, tick_rate=tick_rate))
@@ -252,15 +253,10 @@ class GardenBusClient():
             *utils.number_to_bytes(self.node_id,2), # node id
             *utils.number_to_bytes(length, 3) #length
         ]
-        self.partial_transfer = {
-            "transfer_id": None,
-            "data": data,
-            "filename": filename,
-            "length": length,
-            "ready_for_tx": False,
-            "last_index" : None,
-            "finished": False
-        }
+        self.partial_transfer["data"] = data
+        self.partial_transfer["filename"] = filename
+        self.partial_transfer["length"] = length
+
 
         self.send_packet(arbitration_id=99, bytes=value_request_bytes)
     
@@ -273,6 +269,7 @@ class GardenBusClient():
             "ready_for_tx": False,
             "last_index" : None,
             "finished": False,
+            "last_part_timestamp": None
         }
 
     def handle_transfer_id(self, node_id, transfer_id):
@@ -315,6 +312,8 @@ class GardenBusClient():
                 self.partial_transfer["last_index"] = 0
             index_low = self.partial_transfer["last_index"]*count_of_bytes_per_part
             index_high = index_low+count_of_bytes_per_part
+            part_identifier = self.partial_transfer["last_index"]
+            
             partial_transfer_bytes = [
                 config.PARTIAL_TRANSFER,
                 self.partial_transfer["transfer_id"],
@@ -322,14 +321,16 @@ class GardenBusClient():
                 *self.partial_transfer["data"][index_low:index_high]
             ]
             self.send_packet(arbitration_id=100, bytes=partial_transfer_bytes)
-
+            #print("[{node}] [{transfer}] sending data part {part}".format(node=self.node_id, transfer=self.partial_transfer["transfer_id"], part=part_identifier))
+            self.partial_transfer["last_part_timestamp"] = time()
             if self.partial_transfer["last_index"] == self.partial_transfer["length"]:
                 self.partial_transfer["finished"] = True
 
     def handle_partial_transfer_ack(self, part_identifier):
         if part_identifier == self.partial_transfer["last_index"]:
             self.partial_transfer["last_index"]+=1
-            print("Recipient confirmed part number {part}".format(part=part_identifier))
+            #print("[{node}] next data part is  {part}".format(node=self.node_id, part=self.partial_transfer["last_index"]))
+            #print("Recipient confirmed part number {part}".format(part=part_identifier))
 
 
 
@@ -347,7 +348,11 @@ class GardenBusClient():
                 self.send_partial_transfer_name_init()
             else:
                 if not self.partial_transfer["finished"]:
-                    self.send_partial_data_packet()
+                    if self.partial_transfer["last_part_timestamp"] is not None:
+                        if time()-self.partial_transfer["last_part_timestamp"]>0.07:
+                            self.send_partial_data_packet()
+                    else: 
+                        self.send_partial_data_packet()
                 else:
                     self.send_part_transfer_finished_packet()
                     self.reset_partial_transfer()
@@ -403,6 +408,7 @@ class GardenBusClient():
             if time()-self.last_headstation_alive >= config.HEADSTATION_TICK_RATE and not headstation_timeout_detected:  # if the last alive-packet is more than the tickrate ago
                 headstation_timeout_detected = True
                 print("[ {node_id} ] Headstation timeout detected!".format(node_id=self.node_id))
+            
             self.handle_ongoing_partial_tranfer()
 
         print("[ {node_id} ] Goodbye".format(node_id=self.node_id))
