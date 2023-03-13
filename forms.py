@@ -39,7 +39,7 @@ class AddNewSensorToStation(FlaskForm):
 
 class CreateNewSensorModelForm(FlaskForm):
     model_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Name of the sensor model"})
-    phenomenon_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Name of the observed phenomenon (ie. 'temperature'or 'soil humidity'"})
+    phenomenon_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Name of the observed phenomenon (ie. 'temperature'or 'soil humidity')"})
     unit_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Unit of the measurement (ie. '°C')"})
     calibration_needed = BooleanField(render_kw={"placeholder": "Calibration required for this sensor?"})
     submit = SubmitField("Save sensor model")
