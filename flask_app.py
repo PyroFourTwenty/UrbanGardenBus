@@ -169,7 +169,6 @@ def stations():
     user_dict = {}
     
     own_stations = Station.query.filter_by(belongs_to_user_id=current_user_id)
-    other_stations = Station.query.filter(Station.belongs_to_user_id!=current_user_id)
     sensor_count_of_stations = {}
     for sensor in Sensor.query.all():
         if not sensor.belongs_to_station_id in sensor_count_of_stations:
@@ -178,14 +177,9 @@ def stations():
             } 
         else:
             sensor_count_of_stations[sensor.belongs_to_station_id]["count"] += 1
-    for station in other_stations:
-        user = User.query.filter_by(id=station.belongs_to_user_id).first()
-        if not user.id in user_dict:
-            user_dict[user.id] = user.username
     return render_template('stations.html',
                             form=form, 
                             own_stations=own_stations, 
-                            other_stations=other_stations, 
                             user_dict=user_dict,
                             sensor_count_of_stations=sensor_count_of_stations)
 
@@ -220,7 +214,6 @@ def sensor_model():
             "calibration_needed": sensor_model.calibration_needed
             }
         )  
-
     return render_template('sensor_model_creation.html',form=form, available_sensors=available_sensors)
 
 @app.route('/station/<id>',methods=['GET','POST'])
