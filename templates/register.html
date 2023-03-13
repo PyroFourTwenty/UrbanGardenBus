@@ -1,7 +1,8 @@
+{% extends "layout.html" %}
+
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
+{% block head %}
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,9 +10,21 @@
     <style>
         @import url(https://fonts.googleapis.com/css?family=Roboto:300);
 
+
+        .alert{
+        position: relative;
+        z-index: 1;
+        background: #FFFFFF;
+        max-width: 360px;
+        margin: 0 auto 100px;
+        padding: 15px;
+        text-align: center;
+        box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24);
+    }
+
         .register-page {
             width: 360px;
-            padding: 8% 0 0;
+            padding: 2% 0 0;
             margin: auto;
         }
 
@@ -81,9 +94,9 @@
             background-size: cover;
         }
     </style>
-</head>
+{% endblock %}
 
-<body>
+{% block body %}
 
     <div class="register-page">
         <div class="form">
@@ -99,6 +112,6 @@
             </form>
         </div>
     </div>
-</body>
+    {% endblock %}
 
 </html>
