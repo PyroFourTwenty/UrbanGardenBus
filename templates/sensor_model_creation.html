@@ -1,14 +1,287 @@
+{% extends "layout.html" %}
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create new sensor model</title>
-</head>
-<body>
+{% block head %}
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create new sensor model</title>
+<style>
+    @font-face {
+        font-family: MinSans;
+        src: url("{{ url_for('static', filename='MinSans-Light.otf') }}");
+    }
+
+    .alert {
+        position: relative;
+        z-index: 1;
+        background: #FFFFFF;
+        max-width: 360px;
+        margin: 0 auto 30px;
+        padding: 15px;
+        text-align: center;
+        box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24);
+    }
+
+    html {
+        background: url("static/aerial.jpg") no-repeat center center fixed;
+        background-size: cover;
+        background-position: center;
+        font-family: MinSans;
+    }
+
+    .collapsible {
+        background-color: black;
+        color: white;
+        cursor: pointer;
+        padding: 18px;
+        width: 100%;
+        border: none;
+        text-align: left;
+        outline: none;
+        font-size: 15px;
+        border-top-left-radius: 5px;
+        border-top-right-radius: 5px;
+    }
+
+    .active,
+    .collapsible:hover {
+        background-color: black;
+    }
+
+    .content {
+        background-color: black;
+        padding: 18px 18px;
+        overflow: hidden;
+        color: white;
+        border-bottom-left-radius: 5px;
+        border-bottom-right-radius: 5px;
+    }
+
+    .form-container form input[type=text] {
+        background-color: #444;
+    }
+    html body div#main div#help div ul li div div.content form input,
+    html body div#main div#help div ul li div.content form input {
+        background-color: white;
+    }
+
+    .container {
+        display: flex;
+        flex-wrap: wrap
+    }
+
+    input[type=text],
+    select {
+        width: 100%;
+        padding: 12px 20px;
+        margin: 8px 0;
+        display: inline-block;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    input[type=submit] {
+        width: 100%;
+        background-color: #4CAF50;
+        color: white;
+        padding: 14px 20px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    input[type=submit]:hover {
+        background-color: #45a049;
+    }
+
+    a.fill-div {
+        display: block;
+        height: 100%;
+        width: 100%;
+        text-decoration: none;
+    }
+
+    .sidebar {
+        height: 100%;
+        width: 0;
+        position: fixed;
+        z-index: 1;
+        top: 0;
+        left: 0;
+        background-color: #111;
+        overflow-x: hidden;
+        transition: 0.5s;
+        padding-top: 60px;
+    }
+
+    .sidebar a {
+        padding: 8px 8px 8px 32px;
+        text-decoration: none;
+        font-size: 25px;
+        color: #818181;
+        display: block;
+        transition: 0.3s;
+    }
+
+    .sidebar:hover>a {
+        opacity: 0.3;
+    }
+
+    .sidebar h1 {
+        padding: 8px 8px 8px 32px;
+        text-decoration: none;
+        font-size: 25px;
+        color: #818181;
+        display: block;
+        transition: 0.3s;
+    }
+
+    .sidebar a:hover {
+        color: #f1f1f1;
+        opacity: 1;
+    }
+
+    #back-to-sensor-creation {
+        padding: 0px 0px 0px 20px;
+        text-decoration: none;
+        font-size: 25px;
+        color: rgb(13, 13, 13);
+        display: block;
+        transition: 0.3s;
+    }
+
+    #back-to-sensor-creation:hover {
+        color: black;
+        padding: 0px 0px 0px 10px;
+
+    }
+
+    .sidebar .closebtn {
+        position: absolute;
+        top: 0;
+        right: 25px;
+        font-size: 36px;
+        margin-left: 50px;
+    }
+
+    .openbtn {
+        font-size: 20px;
+        cursor: pointer;
+        background-color: #111;
+        color: white;
+        padding: 10px 15px;
+        border: none;
+    }
+
+    .openbtn:hover {
+        background-color: #444;
+    }
+
+    #main {
+        transition: margin-left .5s;
+        transition: .5s;
+        padding: 16px;
+        background-color: white;
+        background: rgba(255, 255, 255, 0.5);
+        border-radius: 5px;
+    }
+
+    #help {
+        display: none;
+    }
+
+
+    @media screen and (max-height: 450px) {
+        .sidebar {
+            padding-top: 15px;
+        }
+
+        .sidebar a {
+            font-size: 18px;
+        }
+    }
+
+    .second-level-nav {
+        font-size: 12px;
+        text-indent: 12px;
+    }
+
+    #back-to-sensor-creation {
+        padding: 0px 0px 0px 20px;
+        text-decoration: none;
+        font-size: 25px;
+        color: rgb(13, 13, 13);
+        display: none;
+        transition: 0.3s;
+    }
+
+    #back-to-sensor-creation:hover {
+        color: black;
+        padding: 0px 0px 0px 10px;
+
+    }
+
+    #sensor-table {
+        font-family: MinSans, Helvetica, sans-serif;
+        border-collapse: collapse;
+        width: 100%;
+        display: none;
+    }
+
+    #sensor-table td,
+    #sensor-table th {
+        border: 1px solid #ddd;
+        padding: 8px;
+    }
+
+    #sensor-table tr:nth-child(even) {
+        background-color: #f2f2f2;
+    }
+
+    #sensor-table tr:hover {
+        background-color: #ddd;
+    }
+
+    #sensor-table th {
+        padding-top: 12px;
+        padding-bottom: 12px;
+        text-align: left;
+        background-color: black;
+        color: white;
+    }
+</style>
+{% endblock %}
+{% block body %}
+
+<div id="sidebar" class="sidebar">
+
+    <a href="javascript:void(0)" class="closebtn" onclick="toggleNav()">×</a>
+    <h1><u>Sensor models</u></h1>
+    <a href="javascript:void(0)" onclick="setVisible('create-new-sensor-form')" class="second-level-nav">Create new
+        sensor model</a>
+    <a href="javascript:void(0)" onclick="setVisible('sensor-table')" class="second-level-nav">Existing sensors</a>
+    <a href="javascript:void(0)" onclick="setVisible('help')" class="second-level-nav">Help</a>
+    <h1><u>Navigation</u></h1>
+    <a href="{{url_for('dashboard')}}" class="second-level-nav">Dashboard</a>
+    <a href="{{url_for('stations')}}" class="second-level-nav">Stations</a>
+    <a href="{{url_for('logout')}}" class="second-level-nav">Log out</a>
+</div>
+<div id="main">
+    <button class="openbtn" onclick="toggleNav()">☰ Menu</button>
+
     <h1>Sensor model creation</h1>
-    <div>
+    <a href="javascript:void(0)" onclick="setVisible('create-new-sensor-form')" id="back-to-sensor-creation">
+        <h5>
+            ← Back to sensor model creation
+            </h1>
+    </a>
+
+    <button id="create-new-sensor-form" type="button" onclick="setVisible('create-new-sensor-form')"
+        class="collapsible">Create a new sensor model</button>
+    <div class="content">
         <form method="POST" action="">
             {{form.hidden_tag()}}
             <label for="model_name">Sensor model name:</label>
@@ -23,7 +296,7 @@
         </form>
     </div>
 
-    <table>
+    <table id="sensor-table">
         <tr>
             <th>id</th>
             <th>Sensor model name</th>
@@ -47,8 +320,174 @@
         </tr>
 
         {% endfor %}
-    
+
     </table>
 
-</body>
+    <div id="help">
+        <h1>About this page</h1>
+        <div>On this page you can new sensor models if you didn't find your desired model or configuration previously.
+        </div>
+        <h2>Why create a new sensor model?</h2>
+        <div>Imagine the following scenario. <br>
+            You built a brand new station to measure and control something in the garden. You used a sensor that was
+            just brought to the market.
+            Of course you want to be able to add this sensor to your station, but you can't find it in the menu. This
+            menu lets users like you create
+            and configure completely new sensor models, so you can later on see the measurements with the correct unit
+            and phenomenon.
+            <br><br> There is another reason why you would want to create a new sensor model configuration. Imagine you
+            are using a sensor model that is able
+            to measure a distance. This distance could be representing
+            <ul>
+                <li>
+                    the current level of a water tank.
+                    <div>In this case you might not want to measure the water level as a distance, but in liters or
+                        maybe cubic meters.
+                        For example, you could configure your sensor model like this:
+                        <br>
+                        <button id="create-new-sensor-form-example" type="button" class="collapsible">Your water level sensor
+                        </button>
+                        <div class="content">
+
+                        <form>
+
+                            <label for="model_name">Sensor model name:</label>
+                            <input id="model_name" maxlength="256" name="model_name"
+                                placeholder="Name of the sensor model" required="" type="text" disabled value="Distance sensor">
+                            <label for="phenomenon_name">Phenomenon:</label>
+                            <input id="phenomenon_name" maxlength="256" name="phenomenon_name" disabled
+                                placeholder="Name of the observed phenomenon (ie. 'temperature'or 'soil humidity')"
+                                required="" type="text" value="Water level">
+                            <label for="unit_name">Unit:</label>
+                            <input id="unit_name" maxlength="256" name="unit_name"
+                                placeholder="Unit of the measurement (ie. '°C')" required="" type="text" disabled value="liter">
+                            <label for="calibration_needed">Calibration needed?</label>
+                            <input id="calibration_needed" name="calibration_needed" disabled
+                                placeholder="Calibration required for this sensor?" type="checkbox" checked>
+                        </form>
+                        </div>
+                    </div>
+                </li>
+                <li>or how far a window of a greenhouse is open. In this case you might want to translate the distance
+                    to percent or maybe even degrees.
+                    For example, you could configure your sensor model with the following parameters
+                    <br>
+                    <button id="create-new-sensor-form-example" type="button" class="collapsible">Your window opening sensor
+                    </button>
+                    <div class="content">
+
+                    <form>
+
+                        <label for="model_name">Sensor model name:</label>
+                        <input id="model_name" maxlength="256" name="model_name" disabled
+                            placeholder="Name of the sensor model" required="" type="text" value="Window opening sensor">
+                        <label for="phenomenon_name">Phenomenon:</label>
+                        <input id="phenomenon_name" maxlength="256" name="phenomenon_name" disabled
+                            placeholder="Name of the observed phenomenon (ie. 'temperature'or 'soil humidity')"
+                            required="" type="text" value="Window opening">
+                        <label for="unit_name">Unit:</label>
+                        <input id="unit_name" maxlength="256" name="unit_name" disabled
+                            placeholder="Unit of the measurement (ie. '°C')" required="" type="text" value="%">
+                        <label for="calibration_needed">Calibration needed?</label>
+                        <input id="calibration_needed" name="calibration_needed" disabled
+                            placeholder="Calibration required for this sensor?" type="checkbox" checked>
+                    </form>
+                </li>
+            </ul>
+        </div>
+        <h2>Create new sensor models</h2>
+        <div>If you want to create a new sensor, you can use the form thats shown when loading the sensor model creation
+            page.
+            If the form is not shown you can always make it visible by clicking "Create new sensor model" on the sidebar
+            menu.
+
+            <ul>
+                <li>
+                    the name of the sensor model
+                </li>
+                <li>
+                    The phenomenon you want to observe, for example "temperature", "soil humidity" or "water level"
+                </li>
+                <li>
+                    The unit of your measurement, for example "°C", "%", "cm", "km/h", etc.
+                </li>
+            </ul>
+        </div>
+        <h2>What does "Calibration needed" mean?</h2>
+        <div>If you enable this, you can later set a specific calibration amount. You decide what to do with this
+            calibration value in your implementation,
+            but enabling the calibration makes it easier for you to compensate offsets of individual sensors of this
+            sensor model.
+        </div>
+        <h2>Will setting one calibration value of a sensor change the value of all sensors of this model</h2>
+        <div>No. You can set a different calibration value for every individual sensor of a specific sensor model.
+            This way others can use your created sensor model as well and have their own calibration value.</div>
+        <h2>Where can i set the calibration value of my sensor?</h2>
+        <div>First you have to add your sensor to a station. Remember that you can only calibrate sensors if the
+            sensor model configuration allows this (see 'What does "Calibration needed" mean?').
+            After adding an instance of this sensor model to your station, you will see the sensor on the specific slot
+            of your station with an input field, where you can add your calibration value.</div>
+    </div>
+</div>
+<script>
+    var toggle = false;
+    function toggleNav() {
+        toggle = !toggle;
+        if (toggle) {
+            document.getElementById("sidebar").style.width = "250px";
+            document.getElementById("main").style.marginLeft = "250px";
+        }
+        else {
+            document.getElementById("sidebar").style.width = "0";
+            document.getElementById("main").style.marginLeft = "0";
+        }
+    }
+
+    function setVisible(id) {
+        let collapsibles = document.getElementsByClassName("collapsible");
+        let backToSensorCreationButton = document.getElementById("back-to-sensor-creation")
+        let help = document.getElementById("help")
+        let sensortable = document.getElementById("sensor-table")
+        for (let element of collapsibles) {
+            let content = element.nextElementSibling;
+            if (element.id == id) {
+                element.style.display = "block";
+                content.style.display = "block";
+                backToSensorCreationButton.style.display = "block"
+            } else {
+                if (id==help.id && element.id=="create-new-sensor-form-example"){
+                    element.style.display = "block";
+                    content.style.display = "block";
+                
+                }else{
+                    element.style.display = "none";
+                    content.style.display = "none";
+                    backToSensorCreationButton.style.display = "none"
+                }
+            }
+        }
+        if (id == help.id) {
+            help.style.display = "block";
+            let main = document.getElementById("main");
+            main.style.background="rgba(0,0,0,0.9)"
+            main.style.color="white";
+
+            backToSensorCreationButton.style.display = "block";
+        } else {
+            help.style.display = "none"
+            let main = document.getElementById("main");
+            main.style.background="rgba(255,255,255,0.5)"
+            main.style.color="black";
+        }
+        if (id == sensortable.id) {
+            sensortable.style.display = "block"
+            backToSensorCreationButton.style.display = "block";
+        } else {
+            backToSensorCreationButton.style.display = "none";
+            sensortable.style.display = "none"
+        }
+    }
+</script>
+{% endblock %}
+
 </html>
