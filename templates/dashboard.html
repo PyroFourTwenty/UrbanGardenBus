@@ -1,29 +1,134 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+{% extends "layout.html" %}
+{% block head %}
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
-</head>
-<body>
-    <h1>Hello {{username}} </h1>
+    <style>
+        @font-face {
+        font-family: MinSans;
+        src: url("{{ url_for('static', filename='MinSans-Light.otf') }}");
+        }
+        html {
+            background: url("static/aerial.jpg") no-repeat center center fixed;
+            background-size: cover;
+            background-position: center;
+            font-family: MinSans, Georgia, serif; 
+        }
 
-    <a href="{{url_for('stations')}}">Stations</a>
-    <a href="{{url_for('logout')}}">Log out</a>
-    {% for  sensebox_data in data %}
-    <h3>
-        {{sensebox_data["name"]}}
-    </h3>
-        {% for sensor in sensebox_data["sensors"] %}
-    <div>
-            {% if 'lastMeasurement' in sensor %}
-                {{sensor["title"]}} :{{sensor["lastMeasurement"]["value"]}} {{sensor["unit"]}}
-            {% else %}
-                {{sensor["title"]}} : no value yet
-            {% endif %}            
+        .sidebar {
+            height: 100%;
+            width: 0;
+            position: fixed;
+            z-index: 1;
+            top: 0;
+            left: 0;
+            background-color: #111;
+            overflow-x: hidden;
+            transition: 0.5s;
+            padding-top: 60px;
+        }
+
+        .sidebar a {
+            padding: 8px 8px 8px 32px;
+            text-decoration: none;
+            font-size: 25px;
+            color: #818181;
+            display: block;
+            transition: 0.3s;
+        }
+
+        .sidebar a:hover {
+            color: #f1f1f1;
+        }
+
+        .sidebar .closebtn {
+            position: absolute;
+            top: 0;
+            right: 25px;
+            font-size: 36px;
+            margin-left: 50px;
+        }
+
+        .openbtn {
+            font-size: 20px;
+            cursor: pointer;
+            background-color: #111;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+        }
+
+        .openbtn:hover {
+            background-color: #444;
+        }
+
+        #main {
+            transition: margin-left .5s;
+            padding: 16px;
+            background: rgba(255,255,255, 0.5);
+            border-radius: 5px;
+        }
+
+        @media screen and (max-height: 450px) {
+            .sidebar {
+                padding-top: 15px;
+            }
+
+            .sidebar a {
+                font-size: 18px;
+            }
+        }
+    </style>
+{% endblock %}
+
+
+{% block body %}
+
+    <div id="mySidebar" class="sidebar">
+        <a href="javascript:void(0)" class="closebtn" onclick="toggleNav()">×</a>
+        <a href="{{url_for('stations')}}">Stations</a>
+        <a href="#">About</a>
+        <a href="{{url_for('logout')}}">Log out</a>
     </div>
+
+    <div id="main">
+        <button class="openbtn" onclick="toggleNav()">☰</button>
+        <h1>Hello {{username}} </h1>
+
+
+        {% for sensebox_data in data %}
+        <h3>
+            {{sensebox_data["name"]}}
+        </h3>
+        {% for sensor in sensebox_data["sensors"] %}
+        <div>
+            {% if 'lastMeasurement' in sensor %}
+            {{sensor["title"]}} :{{sensor["lastMeasurement"]["value"]}} {{sensor["unit"]}}
+            {% else %}
+            {{sensor["title"]}} : no value yet
+            {% endif %}
+        </div>
         {% endfor %}
-    {% endfor %}
-</body>
+        {% endfor %}
+    </div>
+
+    <script>
+        var toggle = false; 
+        function toggleNav() {
+            toggle=!toggle;
+            if (toggle) {
+                document.getElementById("mySidebar").style.width = "250px";
+                document.getElementById("main").style.marginLeft = "250px";
+            }
+            else {
+                document.getElementById("mySidebar").style.width = "0";
+                document.getElementById("main").style.marginLeft = "0";
+            }
+        }
+    </script>
+{% endblock %}
+
 </html>
