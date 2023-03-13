@@ -2,7 +2,6 @@ from flask_wtf import FlaskForm
 
 from wtforms import StringField, PasswordField, FloatField, SubmitField, SelectField, IntegerField, BooleanField
 from wtforms.validators import InputRequired,Length,ValidationError,NumberRange
-from GardenBusClient.SupportedSensors import supported_sensors
 from models import User
 class LoginForm(FlaskForm):
     username = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder":"Username"})
@@ -17,7 +16,6 @@ class RegisterForm(FlaskForm):
     def validate_username(self, username):
         existing_user_username = User.query.filter_by(username=username.data).first()
         if existing_user_username:
-            print("That user already exists")
             raise ValidationError(
                 "That username is taken"
             )
