@@ -30,7 +30,7 @@
     }
 
     .collapsible {
-        background-color: #777;
+        background-color: black;
         color: white;
         cursor: pointer;
         padding: 18px;
@@ -39,18 +39,26 @@
         text-align: left;
         outline: none;
         font-size: 15px;
+        border-top-left-radius: 5px;
+        border-top-right-radius: 5px;
     }
 
     .active,
     .collapsible:hover {
-        background-color: #555;
+        background-color: black;
     }
 
     .content {
+        background-color: black;
         padding: 18px 18px;
         display: none;
         overflow: hidden;
-        background-color: #f1f1f1;
+        color: white;
+        border-bottom-left-radius: 5px;
+        border-bottom-right-radius: 5px;
+    }
+    .form-container  form  input[type=text]{
+        background-color: #444;
     }
 
     .container {
@@ -75,7 +83,7 @@
     }
     
     .flex-item:hover {
-        background: white;
+        background: rgba(255,255,255,0.2);
         border-color: black;
         color: black;
     }
@@ -134,6 +142,11 @@
         display: block;
         transition: 0.3s;
     }
+
+    .sidebar:hover > a {
+        opacity: 0.3;
+    }
+
     .sidebar h1 {
         padding: 8px 8px 8px 32px;
         text-decoration: none;
@@ -145,6 +158,7 @@
 
     .sidebar a:hover {
         color: #f1f1f1;
+        opacity: 1;
     }
 
     #back-to-stations {
@@ -220,7 +234,10 @@
         text-decoration: none;
     }
 
-
+    #help{
+        display: none;
+        font-weight: 700;
+    }
 
 
     @media screen and (max-height: 450px) {
@@ -241,12 +258,14 @@
 
 {% block body %}
 
-<div id="mySidebar" class="sidebar">
+<div id="sidebar" class="sidebar">
 
     <a href="javascript:void(0)" class="closebtn" onclick="toggleNav()">×</a>
+    <h1><u>Station overview</u></h1>
+    <a href="javascript:void(0)" onclick="setVisible('create-new-station-form')" class="second-level-nav">Create new station</a>
     <h1><u>Navigation</u></h1>
     <a href="{{url_for('dashboard')}}" class="second-level-nav" >Dashboard</a>
-    <a href="#" class="second-level-nav">About</a>
+    <a href="javascript:void(0)" onclick="setVisible('help')" class="second-level-nav">Help</a>
     <a href="{{url_for('logout')}}" class="second-level-nav">Log out</a>
 </div>
 <div id="main">
@@ -293,25 +312,31 @@
                     
                     +
                 </div>
+                <br>
             </a>
 
         </div>
-        <h2>Other stations:</h2>
-        <div class="container">
-            <br>
-            {% for station in other_stations %}
-            <div class="flex-item">
-                <div>{{station.station_name}}</div>
-                <div>{{user_dict[station.belongs_to_user_id]}}</div>
-                {% if station.id in sensor_count_of_stations %}
-                <div>{{sensor_count_of_stations[station.id]["count"]}} sensor{% if
-                    sensor_count_of_stations[station.id]["count"]>1 %}s{% endif %}</div>
-                {% else %}
-                <div>no sensors</div>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
+    </div>
+    <div id="help">
+        <h1>About this page</h1>
+        <div>On this page you can have an overview of your stations and the number of their configured sensors.</div> 
+        <h2>Edit existing stations</h2>
+        <div>You can edit an existing stations by clicking on the tiles under the header "Your stations".</div>
+        <h2>Create new stations</h2>
+        <div>If you want to create a new station,
+        <ul>
+            <li>click the little "+" icon with the dotted border at the end of your existing stations</li>
+            <li>or the click on "Create new staion" in the sidebar.</li>
+        </ul>
+        After clicking a form will appear, allowing you to set some basic properties of your station, like 
+        <ul>
+            <li>
+                the name
+            </li>
+            <li>
+                and coordinates (defaulting to the middle of the HTW Urban Garden). These will help you later on if you want to find the station in OpenSenseMap.
+            </li>
+        </ul></div>
     </div>
 </div>
 <script>
@@ -336,11 +361,11 @@
     function toggleNav() {
         toggle = !toggle;
         if (toggle) {
-            document.getElementById("mySidebar").style.width = "250px";
+            document.getElementById("sidebar").style.width = "250px";
             document.getElementById("main").style.marginLeft = "250px";
         }
         else {
-            document.getElementById("mySidebar").style.width = "0";
+            document.getElementById("sidebar").style.width = "0";
             document.getElementById("main").style.marginLeft = "0";
         }
     }
@@ -349,6 +374,7 @@
         let collapsibles = document.getElementsByClassName("collapsible");
         let allStationsContainer = document.getElementById("all-stations-container");
         let backToStationsButton = document.getElementById("back-to-stations")
+        let help = document.getElementById("help")
         for (let element of collapsibles) {
             let content = element.nextElementSibling;
             if (element.id == id) {
@@ -363,8 +389,14 @@
                 backToStationsButton.style.display = "none"
             }
         }
+        if(id==help.id){
+            help.style.display="block"
+            allStationsContainer.style.display = "none";
+            backToStationsButton.style.display = "block";
+        }else{
+            help.style.display="none"
+        }
     }
-
 </script>
 {% endblock %}
 
