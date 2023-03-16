@@ -38,3 +38,10 @@ class SensorModel(db.Model):
     phenomenon_name = db.Column(db.String(256), nullable=False)
     unit_name = db.Column(db.String(256), nullable=False)
     calibration_needed = db.Column(db.Boolean, nullable=False)
+
+class Actor(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    name = db.Column(db.String(256), nullable=False)
+    belongs_to_station_id = db.Column(db.Integer, nullable=False)
+    station_slot = db.Column(db.Integer, nullable=False)
+    actor_value = db.Column(db.Float, default = 0.0, nullable=False)
