@@ -30,3 +30,7 @@ class Persistence():
         bucket = 'ugb_data/autogen'
         write_api.write(bucket=bucket, record=_point)
 
+    def query(self,query):
+        tables = self.client.query_api().query(query)
+        return tables.to_json(indent=5)
+
