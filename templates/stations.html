@@ -262,10 +262,12 @@
 
     <a href="javascript:void(0)" class="closebtn" onclick="toggleNav()">×</a>
     <h1><u>Station overview</u></h1>
+    <a href="javascript:void(0)" onclick="setVisible('all-stations-container')" class="second-level-nav">Show my stations</a>
     <a href="javascript:void(0)" onclick="setVisible('create-new-station-form')" class="second-level-nav">Create new station</a>
+    <a href="javascript:void(0)" onclick="setVisible('help')" class="second-level-nav">Help</a>
     <h1><u>Navigation</u></h1>
     <a href="{{url_for('dashboard')}}" class="second-level-nav" >Dashboard</a>
-    <a href="javascript:void(0)" onclick="setVisible('help')" class="second-level-nav">Help</a>
+    <a href="{{url_for('sensor_model')}}" class="second-level-nav">Sensor models</a>
     <a href="{{url_for('logout')}}" class="second-level-nav">Log out</a>
 </div>
 <div id="main">

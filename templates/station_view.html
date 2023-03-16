@@ -11,7 +11,8 @@
         font-family: MinSans;
         src: url("{{ url_for('static', filename='MinSans-Light.otf') }}");
     }
-    .alert{
+
+    .alert {
         position: relative;
         z-index: 1;
         background: #FFFFFF;
@@ -21,12 +22,14 @@
         text-align: center;
         box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24);
     }
+
     html {
-            background: url("/static/aerial.jpg") no-repeat center center fixed;
-            background-size: cover;
-            background-position: center;
-            font-family: MinSans, Georgia, serif; 
+        background: url("/static/aerial.jpg") no-repeat center center fixed;
+        background-size: cover;
+        background-position: center;
+        font-family: MinSans, Georgia, serif;
     }
+
     .collapsible {
         background-color: black;
         color: white;
@@ -46,12 +49,12 @@
         background-color: black;
     }
 
-    #station_id, 
-    #ttn_dev_id, 
-    #ttn_dev_eui, 
+    #station_id,
+    #ttn_dev_id,
+    #ttn_dev_eui,
     #ttn_app_key,
     #ttn_join_eui,
-    #osem_id{
+    #osem_id {
         cursor: not-allowed;
     }
 
@@ -64,11 +67,13 @@
         border-bottom-left-radius: 5px;
         border-bottom-right-radius: 5px;
     }
+
     .container {
         display: flex;
         flex-wrap: wrap
     }
-    input[type="text"]{
+
+    input[type="text"] {
         color: black;
     }
 
@@ -130,7 +135,7 @@
         text-align: center;
     }
 
-    #add-sensor-submit {
+    #add-sensor-submit, #add-actor-submit {
         transition: background-color 0.5s ease;
     }
 
@@ -155,6 +160,11 @@
         display: block;
         transition: 0.3s;
     }
+
+    .sidebar:hover>a {
+        opacity: 0.3;
+    }
+
     .sidebar h1 {
         padding: 8px 8px 8px 32px;
         text-decoration: none;
@@ -166,6 +176,7 @@
 
     .sidebar a:hover {
         color: #f1f1f1;
+        opacity: 1;
     }
 
     .sidebar .closebtn {
@@ -194,7 +205,7 @@
     #main {
         transition: margin-left .5s;
         padding: 16px;
-        background: rgba(255,255,255, 0.5);
+        background: rgba(255, 255, 255, 0.5);
         border-radius: 5px;
     }
 
@@ -207,9 +218,81 @@
             font-size: 18px;
         }
     }
-    .second-level-nav{
+
+    .second-level-nav {
         font-size: 12px;
         text-indent: 12px;
+    }
+
+    #sensor-table, #actor-table {
+        font-family: MinSans, Helvetica, sans-serif;
+        border-collapse: collapse;
+        width: 100%;
+    }
+
+    #sensor-table td, #actor-table td,
+    #sensor-table th,  #actor-table th {
+        border: 1px solid #ddd;
+        padding: 8px;
+    }
+
+
+
+    #sensor-table tr:hover, #actor-table tr:hover {
+        background-color: rgb(37, 37, 37);
+    }
+
+    #sensor-table th, #actor-table th {
+        padding-top: 12px;
+        padding-bottom: 12px;
+        text-align: left;
+        background-color: black;
+        color: white;
+    }
+
+    .gg-software-download {
+        box-sizing: border-box;
+        position: relative;
+        display: block;
+        transform: scale(var(--ggs, 1));
+        width: 16px;
+        height: 6px;
+        border: 2px solid;
+        border-top: 0;
+        border-bottom-left-radius: 2px;
+        border-bottom-right-radius: 2px;
+        margin-top: 8px
+    }
+
+    .gg-software-download::after {
+        content: "";
+        display: block;
+        box-sizing: border-box;
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        border-left: 2px solid;
+        border-bottom: 2px solid;
+        transform: rotate(-45deg);
+        left: 2px;
+        bottom: 4px
+    }
+
+    .gg-software-download::before {
+        content: "";
+        display: block;
+        box-sizing: border-box;
+        position: absolute;
+        border-radius: 3px;
+        width: 2px;
+        height: 10px;
+        background: currentColor;
+        left: 5px;
+        bottom: 5px
+    }
+    .download-script{
+        text-decoration: none;
+        color: white;
     }
 </style>
 <link rel="stylesheet" href="{{url_for('static', filename='prism.css')}}" />
@@ -223,14 +306,19 @@
 <div id="mySidebar" class="sidebar">
     <h1><u>Station settings</u></h1>
     <a href="javascript:void(0)" class="second-level-nav" onclick="setVisible('main-collapsible')">Name & location</a>
-    <a href="javascript:void(0)" class="second-level-nav" onclick="setVisible('ttn-osem-collapsible')">TTN & OpenSenseMap</a>
+    <a href="javascript:void(0)" class="second-level-nav" onclick="setVisible('ttn-osem-collapsible')">TTN &
+        OpenSenseMap</a>
     <a href="javascript:void(0)" class="second-level-nav" onclick="setVisible('sensor-collapsible')">Sensors</a>
-    <a href="javascript:void(0)" class="second-level-nav" onclick="setVisible('lora32-code-collapsible')">LoRa32 code</a>
-    <a href="javascript:void(0)" class="second-level-nav" onclick="setVisible('python-code-collapsible')">Python code</a>
+    <a href="javascript:void(0)" class="second-level-nav" onclick="setVisible('actor-collapsible')">Actors</a>
+    <a href="javascript:void(0)" class="second-level-nav" onclick="setVisible('lora32-code-collapsible')">LoRa32
+        code</a>
+    <a href="javascript:void(0)" class="second-level-nav" onclick="setVisible('python-code-collapsible')">Python
+        code</a>
     <h1><u>Navigation</u></h1>
     <a href="javascript:void(0)" class="closebtn" onclick="toggleNav()">×</a>
-    <a href="#" class="second-level-nav">About</a>
     <a href="{{url_for('stations')}}" class="second-level-nav">Stations</a>
+    <a href="{{url_for('dashboard')}}" class="second-level-nav">Dashboard</a>
+    <a href="{{url_for('sensor_model')}}" class="second-level-nav">Sensor models</a>
     <a href="{{url_for('logout')}}" class="second-level-nav">Log out</a>
 </div>
 
@@ -290,7 +378,7 @@
             {{sensor_form.sensor_type}}
             <br>
             <label for="slot">Slot:</label>
-            {{sensor_form.slot}}
+            {{sensor_form.sensor_slot}}
             {{sensor_form.submit}}
             <b>Not finding the sensor you are looking for? <a href="/sensormodel">Create a new sensor model!</a> </b>
 
@@ -298,7 +386,7 @@
         {% if sensors|length == 0 %}
         <h2>No sensors added yet</h2>
         {% else %}
-        <table>
+        <table id="sensor-table">
             <th>Sensor model</th>
             <th>Slot</th>
             <th>Calibration value</th>
@@ -337,24 +425,91 @@
 
         {% endif %}
     </div>
-<button id="lora32-code-collapsible" onClick="toggleCollapsible(this.id)" type="button" class="collapsible">Show or hide
-    Lora32 code for {{station.station_name}}</button>
-<div class="content">
-    <div id="lora32-client-code">
-        <h1>Lora32 client code</h1>
-        <pre><code class="language-arduino">{{lora32_client_code}}</code></pre>
-    </div>
-</div>
 
-<button id="python-code-collapsible" onClick="toggleCollapsible(this.id)" type="button" class="collapsible">Show or hide
-    Python code for {{station.station_name}}</button>
-<div class="content">
-    <div id="python-client-code">
-        <h1>Python client code</h1>
-        <pre><code class="language-python">{{python_client_code}}</code></pre>
+    <button id="actor-collapsible" type="button" onClick="toggleCollapsible(this.id)" class="collapsible">Add actors </button>
+    <div class="content">
+        <h1>Actors</h1>
+        <form method="POST" action="{{url_for('add_actor_to_station', station_id=station.id)}}">
+            {{actor_form.hidden_tag()}}
+            <label for="actor_name">Actor name:</label>
+            {{actor_form.actor_name}}
+            <br>
+            <label for="actor_slot">Slot:</label>
+            {{actor_form.actor_slot}}
+            {{actor_form.submit}}
+        </form>
+        {% if actors|length == 0 %}
+        <h2>No actors added yet</h2>
+        {% else %}
+        <table id="actor-table">
+            <th>Actor name</th>
+            <th>Slot</th>
+            <th>Value</th>
+            <th></th>
+            {% for actor in actors %}
+            <tr>
+                <td>
+                    {{ actor["actor_name"] }}
+                </td>
+                <td class="actorTableSlotColumm">
+                    {{ actor["actor_slot"] }}
+                </td>
+                <td>
+                    <form method="POST" action="{{url_for('set_actor_value', actor_id=actor['actor_id'])}}"
+                        onsubmit="return false;">
+                        <input onfocusout="this.form.submit(); return false;"
+                            onkeypress='javascript: if(event.key==="Enter"){event.preventDefault();this.form.submit();return false;}'
+                            id="" name="actor_value" type="number" step="0.01"
+                            value='{{ actor["actor_value"] }}''>
+                        </form>
+                    </td>
+                    <td>
+                        <form method="POST"
+                            action="{{url_for('delete_actor', actor_id=actor['actor_id'])}}"
+                            onsubmit="return confirm('Are you sure you want to delete {{actor['actor_name']}} on slot {{actor['actor_slot']}}?');">
+                        <button class="delete" type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% endif %}
     </div>
-</div>
-<iframe id="map-iframe" src="{{url_for('map')}}" width="100%" height="700px" frameBorder="0"></iframe>
+
+    <button id="lora32-code-collapsible" onClick="toggleCollapsible(this.id)" type="button" class="collapsible">Show or
+        hide
+        Lora32 code for {{station.station_name}}</button>
+    <div class="content">
+        <div id="lora32-client-code">
+            <h1>Lora32 client code</h1>
+            <a class="download-script" href="javascript:void(0)" onclick="downloadScript('lora32')">
+                <div>
+                    main.cpp
+                    <i class="gg-software-download"></i>
+                </div>
+            </a>
+            <br>
+            <pre><code id="lora32-code-container" class="language-arduino">{{lora32_client_code}}</code></pre>
+        </div>
+    </div>
+
+    <button id="python-code-collapsible" onClick="toggleCollapsible(this.id)" type="button" class="collapsible">Show or
+        hide
+        Python code for {{station.station_name}}</button>
+    <div class="content">
+        <div id="python-client-code">
+            <h1>Python client code</h1>
+            <a class="download-script" href="javascript:void(0)" onclick="downloadScript('python')">
+                <div>
+                    my_client.py
+                    <i class="gg-software-download"></i>
+                </div>
+            </a>
+            <br>
+            <pre><code id="python-code-container" class="language-python">{{python_client_code}}</code></pre>
+        </div>
+    </div>
+    <iframe id="map-iframe" src="{{url_for('map')}}" width="100%" height="700px" frameBorder="0"></iframe>
 </div>
 </div>
 </div>
@@ -374,21 +529,21 @@
             document.getElementById("main").style.marginLeft = "0";
         }
     }
-    function setVisible(id){
+    function setVisible(id) {
         console.log(id)
-        if (!pageFresh){
+        if (!pageFresh) {
             toggleNav();
         }
-        pageFresh=false;
+        pageFresh = false;
         //toggleCollapsible(id);
         let collapsibles = document.getElementsByClassName("collapsible");
         for (let element of collapsibles) {
             let content = element.nextElementSibling;
-            
-            if (element.id==id){
+
+            if (element.id == id) {
                 element.style.display = "block";
                 content.style.display = "block";
-            }else{
+            } else {
                 element.style.display = "none";
                 content.style.display = "none";
             }
@@ -396,30 +551,57 @@
 
     }
 
+    //sensor slot validation, dirty solution, combine with actor slot validation
     let extendCollapsible = {{ extend_collapsible }}
-    let slotInput = document.getElementById('slot')
-    let blockedSlots = {{ blocked_slots_for_station }}
+    let sensorSlotInput = document.getElementById('sensor_slot')
+    let blockedSensorSlots = {{ blocked_sensor_slots_for_station }}
     for (let i = 0; i < 255; i++) {
-        if (!blockedSlots.includes(i)) {
-            slotInput.value = i;
+        if (!blockedSensorSlots.includes(i)) {
+            sensorSlotInput.value = i;
             break;
         }
     }
-    slotInput.onchange = function () {
+    sensorSlotInput.onchange = function () {
         submitButton = document.getElementById("add-sensor-submit");
-        if (blockedSlots.includes(parseInt(slotInput.value))) {
-            slotInput.style = "border:1px solid red;"
+        if (blockedSensorSlots.includes(parseInt(sensorSlotInput.value))) {
+            sensorSlotInput.style = "border:1px solid red;"
             submitButton.disabled = true;
             submitButton.style = "background-color: #e71c1c;";
             submitButton.value = "Slot unavailable"
 
         } else {
             submitButton.disabled = false;
-            slotInput.style = "border: 1px solid white;"
+            sensorSlotInput.style = "border: 1px solid white;"
             submitButton.style = "background-color: #4CAF50;";
             submitButton.value = "Add sensor"
         }
     }
+
+    //actor slot validation
+    let actorSlotInput = document.getElementById('actor_slot')
+    let blockedActorSlots = {{ blocked_actor_slots_for_station }}
+    for (let i = 0; i < 255; i++) {
+        if (!blockedActorSlots.includes(i)) {
+            actorSlotInput.value = i;
+            break;
+        }
+    }
+    actorSlotInput.onchange = function () {
+        submitButton = document.getElementById("add-actor-submit");
+        if (blockedActorSlots.includes(parseInt(actorSlotInput.value))) {
+            actorSlotInput.style = "border:1px solid red;"
+            submitButton.disabled = true;
+            submitButton.style = "background-color: #e71c1c;";
+            submitButton.value = "Slot unavailable"
+
+        } else {
+            submitButton.disabled = false;
+            actorSlotInput.style = "border: 1px solid white;"
+            submitButton.style = "background-color: #4CAF50;";
+            submitButton.value = "Add actor"
+        }
+    }
+
     //let collapsible = document.getElementById("collapsible")
     function toggleCollapsible(id) {
         let collapsible = document.getElementById(id)
@@ -456,6 +638,17 @@
     window.onbeforeunload = function (e) {
         localStorage.setItem('scrollpos', window.scrollY);
     };
+    function downloadScript(type){
+        const link = document.createElement("a");
+        
+        const content = type=="python" ? document.getElementById("python-code-container").innerText : document.getElementById("lora32-code-container").innerText;        
+        const file = new Blob([content], { type: 'text/plain' });
+        link.href = URL.createObjectURL(file);
+        let filename = type=="python" ? "my_client.py" : "main.cpp" 
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
 </script>
 {% endblock %}
 
