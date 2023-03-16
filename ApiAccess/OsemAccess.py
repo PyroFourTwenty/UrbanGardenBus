@@ -141,14 +141,9 @@ class OsemAccess:
                 }
             ]
         }
-        print("now putting new sensor")
         put_new_sensor = requests.put(
                 url, headers=headers, data=json.dumps(body))
             
-        for _ in range(10):
-
-            print("ASDASDASD")
-        print("PUT NEW SENSOR", put_new_sensor)
         if delete_dummy_sensor:
             self.delete_obligatory_first_sensor(sensebox_id=sensebox_id)
         new_sensor_id = None
