@@ -41,6 +41,7 @@ class Headstation():
                 "packet_direction": "outgoing"
             }
         })
+        self.connected_clients[node_id]["sensors"][sensor_slot]["last_value_request"] = time()
         self.send_packet(arbitration_id=arbit_id, bytes=value_request_bytes)
 
     def send_packet(self, arbitration_id, bytes: list):
@@ -167,8 +168,10 @@ class Headstation():
                 },
             }
         self.connected_clients[node_id]["sensors"][sensor_slot]={
-            "sensor_model_id": sensor_model_id
+            "sensor_model_id": sensor_model_id,
+            "last_value_request": 0
         }
+        self.connected_clients[node_id]["last_sensor_register_packet"] = time()
         print("[ HEAD ] Node {node} registered sensor model {sensor_model} on slot {slot}".format(
             node=node_id, sensor_model=sensor_model_id, slot=sensor_slot))
         self.db_access.write_to_db(data)
@@ -326,6 +329,17 @@ class Headstation():
             try:
                 copied_clients = self.connected_clients.copy()
                 timeout_per_node = len(copied_clients.keys())*120
+                
+                for node in copied_clients:
+                    if time()-copied_clients[node]["last_sensor_register_packet"]>=30:
+                        for sensor in sorted(copied_clients[node]["sensors"]):
+                            if time()-copied_clients[node]["sensors"][sensor]["last_value_request"] >= 30:
+                                print("[ HEAD ] requesting value from node {node} on slot {slot}".format(node=node, slot=sensor))
+
+                                self.request_value(node, sensor)
+                                sleep(0.2)
+
+                
                 for node in copied_clients:
                     all_values_present = True
                     values = []
@@ -384,12 +398,7 @@ class Headstation():
         while self.running:
             if time()-self.__last_alive >= self.tick_rate:
                 self.send_alive_packet()
-                for node in self.connected_clients:
-                    for sensor in self.connected_clients[node]["sensors"]:
-                        print("[ HEAD ] requesting value from node {node} on slot {slot}".format(node=node, slot=sensor))
-                        self.request_value(node, sensor)
-                        sleep(0.2)
-            msg = self.bus.recv(timeout=.1)
+            msg = self.bus.recv(timeout=1)
             if msg is not None:
                 self.parse_packet(msg.data)
         print("[ HEAD ] ending service loop, waiting for {count} clients to disconnect".format(
