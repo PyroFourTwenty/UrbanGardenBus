@@ -1,92 +1,282 @@
+{% extends "layout.html" %}
 <!DOCTYPE html>
 <html lang="en">
 
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=, initial-scale=1.0">
-    <title>Stations</title>
-    <style>
-        .collapsible {
-            background-color: #777;
-            color: white;
-            cursor: pointer;
-            padding: 18px;
-            width: 100%;
-            border: none;
-            text-align: left;
-            outline: none;
-            font-size: 15px;
+{% block head %}
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=, initial-scale=1.0">
+<title>Stations</title>
+<style>
+    @font-face {
+        font-family: MinSans;
+        src: url("{{ url_for('static', filename='MinSans-Light.otf') }}");
+    }
+    .alert{
+        position: relative;
+        z-index: 1;
+        background: #FFFFFF;
+        max-width: 360px;
+        margin: 0 auto 30px;
+        padding: 15px;
+        text-align: center;
+        box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24);
+    }
+    html {
+        background: url("static/aerial.jpg") no-repeat center center fixed;
+        background-size: cover;
+        background-position: center;
+        font-family: MinSans;
+    }
+
+    .collapsible {
+        background-color: black;
+        color: white;
+        cursor: pointer;
+        padding: 18px;
+        width: 100%;
+        border: none;
+        text-align: left;
+        outline: none;
+        font-size: 15px;
+        border-top-left-radius: 5px;
+        border-top-right-radius: 5px;
+    }
+
+    .active,
+    .collapsible:hover {
+        background-color: black;
+    }
+
+    .content {
+        background-color: black;
+        padding: 18px 18px;
+        display: none;
+        overflow: hidden;
+        color: white;
+        border-bottom-left-radius: 5px;
+        border-bottom-right-radius: 5px;
+    }
+    .form-container  form  input[type=text]{
+        background-color: #444;
+    }
+
+    .container {
+        display: flex;
+        flex-wrap: wrap
+    }
+
+    .flex-item {
+        background: black;
+        padding: 5px;
+        margin: 5px;
+        line-height: 50px;
+        color: white;
+        font-weight: bold;
+        font-size: 2em;
+        text-align: center;
+        border-radius: 5px;
+        border-style: solid;
+        border-color: black;
+        border-width: 2px;
+        transition: 0.3s;
+    }
+    
+    .flex-item:hover {
+        background: rgba(255,255,255,0.2);
+        border-color: black;
+        color: black;
+    }
+
+    input[type=text],
+    select {
+        width: 100%;
+        padding: 12px 20px;
+        margin: 8px 0;
+        display: inline-block;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    input[type=submit] {
+        width: 100%;
+        background-color: #4CAF50;
+        color: white;
+        padding: 14px 20px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    input[type=submit]:hover {
+        background-color: #45a049;
+    }
+
+    a.fill-div {
+        display: block;
+        height: 100%;
+        width: 100%;
+        text-decoration: none;
+    }
+
+    .sidebar {
+        height: 100%;
+        width: 0;
+        position: fixed;
+        z-index: 1;
+        top: 0;
+        left: 0;
+        background-color: #111;
+        overflow-x: hidden;
+        transition: 0.5s;
+        padding-top: 60px;
+    }
+
+    .sidebar a {
+        padding: 8px 8px 8px 32px;
+        text-decoration: none;
+        font-size: 25px;
+        color: #818181;
+        display: block;
+        transition: 0.3s;
+    }
+
+    .sidebar:hover > a {
+        opacity: 0.3;
+    }
+
+    .sidebar h1 {
+        padding: 8px 8px 8px 32px;
+        text-decoration: none;
+        font-size: 25px;
+        color: #818181;
+        display: block;
+        transition: 0.3s;
+    }
+
+    .sidebar a:hover {
+        color: #f1f1f1;
+        opacity: 1;
+    }
+
+    #back-to-stations {
+        padding: 0px 0px 0px 20px;
+        text-decoration: none;
+        font-size: 25px;
+        color: rgb(13, 13, 13);
+        display: block;
+        transition: 0.3s;
+    }
+
+    #back-to-stations:hover {
+        color: black;
+        padding: 0px 0px 0px 10px;
+
+    }
+
+    .sidebar .closebtn {
+        position: absolute;
+        top: 0;
+        right: 25px;
+        font-size: 36px;
+        margin-left: 50px;
+    }
+
+    .openbtn {
+        font-size: 20px;
+        cursor: pointer;
+        background-color: #111;
+        color: white;
+        padding: 10px 15px;
+        border: none;
+    }
+
+    .openbtn:hover {
+        background-color: #444;
+    }
+
+    #main {
+        transition: margin-left .5s;
+        padding: 16px;
+        background-color: white;
+        background: rgba(255, 255, 255, 0.5);
+        border-radius: 5px;
+    }
+
+    #create-new-station {
+        border-style: dotted;
+        border-radius: 5px;
+        border-color: white;
+        width: 10%;
+
+    }
+
+    .flex-item-add-new-station {
+        background: transparent;
+        padding: 5px;
+        margin: 5px;
+        line-height: 50px;
+        color: black;
+        font-weight: bold;
+        font-size: 2em;
+        text-align: center;
+        border-radius: 5px;
+        border-style: dotted;
+        border-color: black;
+        border-width: 2px;
+        transition: 0.3s;
+    }
+    
+
+    .station-anchor {
+        text-decoration: none;
+    }
+
+    #help{
+        display: none;
+        font-weight: 700;
+    }
+
+
+    @media screen and (max-height: 450px) {
+        .sidebar {
+            padding-top: 15px;
         }
 
-        .active,
-        .collapsible:hover {
-            background-color: #555;
+        .sidebar a {
+            font-size: 18px;
         }
+    }
+    .second-level-nav{
+        font-size: 12px;
+        text-indent: 12px;
+    }
+</style>
+{% endblock %}
 
-        .content {
-            padding: 0 18px;
-            display: none;
-            overflow: hidden;
-            background-color: #f1f1f1;
-        }
+{% block body %}
 
-        .container {
-            display: flex;
-            flex-wrap: wrap
-        }
+<div id="sidebar" class="sidebar">
 
-        .flex-item {
-            background: tomato;
-            padding: 5px;
-            margin: 5px;
+    <a href="javascript:void(0)" class="closebtn" onclick="toggleNav()">×</a>
+    <h1><u>Station overview</u></h1>
+    <a href="javascript:void(0)" onclick="setVisible('all-stations-container')" class="second-level-nav">Show my stations</a>
+    <a href="javascript:void(0)" onclick="setVisible('create-new-station-form')" class="second-level-nav">Create new station</a>
+    <a href="javascript:void(0)" onclick="setVisible('help')" class="second-level-nav">Help</a>
+    <h1><u>Navigation</u></h1>
+    <a href="{{url_for('dashboard')}}" class="second-level-nav" >Dashboard</a>
+    <a href="{{url_for('sensor_model')}}" class="second-level-nav">Sensor models</a>
+    <a href="{{url_for('logout')}}" class="second-level-nav">Log out</a>
+</div>
+<div id="main">
+    <button class="openbtn" onclick="toggleNav()">☰ Menu</button>
 
-            line-height: 50px;
-            color: white;
-            font-weight: bold;
-            font-size: 2em;
-            text-align: center;
-        }
-
-        input[type=text],
-        select {
-            width: 100%;
-            padding: 12px 20px;
-            margin: 8px 0;
-            display: inline-block;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-
-        input[type=submit] {
-            width: 100%;
-            background-color: #4CAF50;
-            color: white;
-            padding: 14px 20px;
-            margin: 8px 0;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        input[type=submit]:hover {
-            background-color: #45a049;
-        }
-
-        a.fill-div {
-            display: block;
-            height: 100%;
-            width: 100%;
-            text-decoration: none;
-        }
-    </style>
-</head>
-
-<body>
-    <a href="{{url_for('dashboard')}}">Return to dashboard</a>
     <h1>Stations</h1>
-    <button type="button" class="collapsible">Create a new station</button>
+    <a href="javascript:void(0)" onclick="setVisible('all-stations-container')" id="back-to-stations"> <h5> ← Back to
+        stations</h1></a>
+    <button id="create-new-station-form" type="button" class="collapsible">Create a new station</button>
     <div class="content">
         <div class="form_container" style="display: flex; flex-direction: column">
             <form method="POST" action="">
@@ -103,54 +293,114 @@
             </form>
         </div>
     </div>
-    <h2>Your stations:</h2>
-
-    <div class="container">
-        <br>
-        {% for station in own_stations %}
-        <a href="{{url_for('update_station',id=station.id)}}" class="fill-div">
-            <div class="flex-item">
-                <div>{{station.station_name}}</div>
-                {% if station.id in sensor_count_of_stations %}
-                    <div>{{sensor_count_of_stations[station.id]["count"]}} sensor{% if sensor_count_of_stations[station.id]["count"]>1 %}s{% endif %} </div>
-                {% else %}
+    <div id="all-stations-container">
+        <h2>Your stations:</h2>
+        <div class="container">
+            {% for station in own_stations %}
+            <a class="station-anchor" href="{{url_for('update_station',id=station.id)}}">
+                <div class="flex-item">
+                    <div>{{station.station_name}}</div>
+                    {% if station.id in sensor_count_of_stations %}
+                    <div>{{sensor_count_of_stations[station.id]["count"]}} sensor{% if
+                        sensor_count_of_stations[station.id]["count"]>1 %}s{% endif %} </div>
+                    {% else %}
                     <div>no sensors</div>
-                {% endif %}
-            </div>
-        </a>
-        {% endfor %}
-    </div>
-    <h2>Other stations:</h2>
-    <div class="container">
-        <br>
-        {% for station in other_stations %}
-        <div class="flex-item">
-            <div>{{station.station_name}}</div>
-            <div>{{user_dict[station.belongs_to_user_id]}}</div>
-            {% if station.id in sensor_count_of_stations %}
-                <div>{{sensor_count_of_stations[station.id]["count"]}} sensor{% if sensor_count_of_stations[station.id]["count"]>1 %}s{% endif %}</div>
-            {% else %}
-                <div>no sensors</div>
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
-    <script>
-        var coll = document.getElementsByClassName("collapsible");
-        var i;
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+            <a class="station-anchor" href="javascript:void(0)" onclick="setVisible('create-new-station-form')">
+                <div class="flex-item-add-new-station">
+                    
+                    +
+                </div>
+                <br>
+            </a>
 
-        for (i = 0; i < coll.length; i++) {
-            coll[i].addEventListener("click", function () {
-                this.classList.toggle("active");
-                var content = this.nextElementSibling;
-                if (content.style.display === "block") {
-                    content.style.display = "none";
-                } else {
-                    content.style.display = "block";
-                }
-            });
+        </div>
+    </div>
+    <div id="help">
+        <h1>About this page</h1>
+        <div>On this page you can have an overview of your stations and the number of their configured sensors.</div> 
+        <h2>Edit existing stations</h2>
+        <div>You can edit an existing stations by clicking on the tiles under the header "Your stations".</div>
+        <h2>Create new stations</h2>
+        <div>If you want to create a new station,
+        <ul>
+            <li>click the little "+" icon with the dotted border at the end of your existing stations</li>
+            <li>or the click on "Create new staion" in the sidebar.</li>
+        </ul>
+        After clicking a form will appear, allowing you to set some basic properties of your station, like 
+        <ul>
+            <li>
+                the name
+            </li>
+            <li>
+                and coordinates (defaulting to the middle of the HTW Urban Garden). These will help you later on if you want to find the station in OpenSenseMap.
+            </li>
+        </ul></div>
+    </div>
+</div>
+<script>
+    setVisible("none");
+    var coll = document.getElementsByClassName("collapsible");
+    var i;
+    for (i = 0; i < coll.length; i++) {
+        coll[i].addEventListener("click", function () {
+            this.classList.toggle("active");
+            var content = this.nextElementSibling;
+            if (content.style.display === "block") {
+                content.style.display = "none";
+            } else {
+                content.style.display = "block";
+            }
+        });
+    }
+
+
+
+    var toggle = false;
+    function toggleNav() {
+        toggle = !toggle;
+        if (toggle) {
+            document.getElementById("sidebar").style.width = "250px";
+            document.getElementById("main").style.marginLeft = "250px";
         }
-    </script>
-</body>
+        else {
+            document.getElementById("sidebar").style.width = "0";
+            document.getElementById("main").style.marginLeft = "0";
+        }
+    }
+
+    function setVisible(id) {
+        let collapsibles = document.getElementsByClassName("collapsible");
+        let allStationsContainer = document.getElementById("all-stations-container");
+        let backToStationsButton = document.getElementById("back-to-stations")
+        let help = document.getElementById("help")
+        for (let element of collapsibles) {
+            let content = element.nextElementSibling;
+            if (element.id == id) {
+                allStationsContainer.style.display = "none"
+                element.style.display = "block";
+                content.style.display = "block";
+                backToStationsButton.style.display = "block"
+            } else {
+                allStationsContainer.style.display = "block"
+                element.style.display = "none";
+                content.style.display = "none";
+                backToStationsButton.style.display = "none"
+            }
+        }
+        if(id==help.id){
+            help.style.display="block"
+            allStationsContainer.style.display = "none";
+            backToStationsButton.style.display = "block";
+        }else{
+            help.style.display="none"
+        }
+    }
+</script>
+{% endblock %}
+
 
 </html>

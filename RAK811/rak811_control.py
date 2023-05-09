@@ -10,7 +10,7 @@ class RAK811():
         self.ser.write(str.encode(command+'\r\n'))
         if command=='at+join' or 'at+send' in command:
             print('waiting longer for join/send')
-            self.print_response(60)
+            self.print_response(120)
         else:
             self.print_response()
 
@@ -20,7 +20,7 @@ class RAK811():
         while time()-t<time_to_read:
             response = self.ser.readline().decode('utf-8').strip()
             print('Response:',response)
-            if 'OK' in response and return_on_ok:
+            if ('OK' in response or "ERROR" in response) and return_on_ok:
                 return
 
     def send_lorawan_message(self, message, region, app_eui, app_key, dev_eui):
@@ -33,6 +33,8 @@ class RAK811():
         self.__send_at_command('at+set_config=lora:app_eui:'+app_eui)
         self.__send_at_command('at+set_config=lora:app_key:'+app_key)
         self.__send_at_command('at+set_config=lora:dev_eui:'+dev_eui)
+        self.__send_at_command('at+set_config=lora:dr:'+str(5)) # datarate for long payloads
+
         self.__send_at_command('at+set_config=device:restart')
         self.__send_at_command('at+join')
         self.__send_at_command('at+send=lora:2:'+message)
