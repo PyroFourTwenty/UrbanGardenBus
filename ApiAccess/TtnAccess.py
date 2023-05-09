@@ -2,7 +2,7 @@ import requests
 import json
 import random
 import secrets
-
+from .ApiAccessExceptions import NoInternetConnection
 class TtnAccess():
     full_acc_key: str = None
     username: str = None
@@ -30,10 +30,12 @@ class TtnAccess():
                 "join_server_address": "eu1.cloud.thethings.network"
             }
         }
-        
-        request = requests.post(
-            url=url, headers=headers, data=json.dumps(body))
-        return request.status_code
+        try:
+            request = requests.post(
+                url=url, headers=headers, data=json.dumps(body))
+            return request.status_code
+        except requests.exceptions.ConnectionError:
+            raise NoInternetConnection()
 
     def create_new_ttn_enddevice(self, join_eui, dev_eui, dev_id, app_id, app_key):
         url = 'https://eu1.cloud.thethings.network/api/v3/applications/{app_id}/devices'.format(
@@ -64,12 +66,14 @@ class TtnAccess():
                 ]
             }
         }
-        result = requests.post(
+        try:
+            result = requests.post(
             url=url, headers=headers, data=json.dumps(body))
-        status_code = result.status_code
-        if status_code != 200:
-            print(result.text)
-
+            status_code = result.status_code
+            if status_code != 200:
+                print(result.text)
+        except requests.exceptions.ConnectionError:
+            raise NoInternetConnection()
         body = {
             "end_device":{
                 "frequency_plan_id":"EU_863_870_TTN",
@@ -304,9 +308,11 @@ class TtnAccess():
                 ]
             }
             }
-        result = requests.post(url=url, headers=headers, data=json.dumps(body))
-        return result.status_code 
-    
+        try:
+            result = requests.post(url=url, headers=headers, data=json.dumps(body))
+            return result.status_code 
+        except requests.exceptions.ConnectionError:
+            raise NoInternetConnection()
     def get_application_ids(self):
         ids = []
         url = "https://eu1.cloud.thethings.network/api/v3/applications"#?page=1&limit=20&order=-created_at&field_mask=name%2Cdescription%2Cnetwork_server_address%2Capplication_server_address%2Cjoin_server_address"

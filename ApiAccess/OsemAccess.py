@@ -1,7 +1,7 @@
 import requests
 import json
 from time import time
-
+from .ApiAccessExceptions import InvalidCredentials, NoInternetConnection
 class OsemAccess:
     email: str = ''
     password: str = ''
@@ -9,10 +9,11 @@ class OsemAccess:
     refresh_token = ''
     last_sign_in = None
     refresh_sign_in_after_seconds = 10*60 # 10 minutes
-    def __init__(self, email: str = '', password: str = ''):
+    def __init__(self, email: str = '', password: str = '', auto_sign_in = True):
         self.email = email
         self.password = password
-        self.sign_in()
+        if auto_sign_in:
+            self.sign_in()
 
     def sign_in(self):
         url = 'https://api.opensensemap.org/users/sign-in'
@@ -21,17 +22,23 @@ class OsemAccess:
             'password': self.password
         }
         headers = {'content-type': 'application/json'}
-        r = requests.post(url, params=params, headers=headers)
-        if r.status_code == 200:
-            self.auth_token = r.json()["token"]
-            self.refresh_token = r.json()["refreshToken"]
-            self.last_sign_in = time()
-        else:
-            raise Exception("OsemAccess: OpenSenseMap login credentials seem to be invalid")
-        return r.status_code == 200
-    
+        try:
+            r = requests.post(url, params=params, headers=headers)
+            if r.status_code == 200:
+                self.auth_token = r.json()["token"]
+                self.refresh_token = r.json()["refreshToken"]
+                self.last_sign_in = time()
+            else:
+                raise InvalidCredentials()
+            return r.status_code == 200
+        except requests.exceptions.ConnectionError:
+            raise NoInternetConnection()
+
     def check_last_sign_in(self):
-        if time()-self.last_sign_in>=self.refresh_sign_in_after_seconds:
+        if self.last_sign_in is not None:
+            if time()-self.last_sign_in>=self.refresh_sign_in_after_seconds:
+                self.sign_in()
+        else:
             self.sign_in()
 
     def get_available_senseboxes(self):
@@ -112,7 +119,9 @@ class OsemAccess:
         return requests.delete(url=url, headers=headers,data=json.dumps(body)).status_code
 
     def put_new_sensor(self, sensebox_id:str, icon:str, sensor_type:str, phenomenon:str, unit:str, delete_dummy_sensor= True):
+        print("checking last signin")
         self.check_last_sign_in()
+        print("checking last signin done")
         url = 'https://api.opensensemap.org/boxes/{sensebox_id}'.format(
             sensebox_id=sensebox_id)
 
@@ -132,9 +141,9 @@ class OsemAccess:
                 }
             ]
         }
-
         put_new_sensor = requests.put(
-            url, headers=headers, data=json.dumps(body))
+                url, headers=headers, data=json.dumps(body))
+            
         if delete_dummy_sensor:
             self.delete_obligatory_first_sensor(sensebox_id=sensebox_id)
         new_sensor_id = None

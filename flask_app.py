@@ -1,18 +1,22 @@
-from flask import Flask, render_template, redirect, url_for, request, Response
+from flask import Flask, render_template, redirect, url_for, request, Response, flash
 from flask_login import login_user, LoginManager, login_required, logout_user, current_user
-from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation, CreateNewSensorModelForm
-from models import User, Station, Sensor, SensorModel, CalibrationValueForSensor
+from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation, CreateNewSensorModelForm, AddNewActorToStation
+from models import User, Station, Sensor, SensorModel, CalibrationValueForSensor, Actor
 from CodeGeneration.code_generator import CodeGenerator
 from database import db
 from flask_bcrypt import Bcrypt
 from ApiAccess.OsemAccess import OsemAccess
 from ApiAccess.TtnAccess import TtnAccess
+from ApiAccess.ApiAccessExceptions import NoInternetConnection, NotSignedIn, InvalidCredentials
 import json
 from werkzeug.exceptions import BadRequestKeyError
 from jinja2 import Template
 import requests
 import re
 import configparser
+from datetime import datetime, timedelta
+from PersistenceLayer.persistence import Persistence
+import gardenbus_config
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
@@ -23,13 +27,13 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
-osem_access = None
-ttn_access = None
+osem_access : OsemAccess = None
+ttn_access : TtnAccess = None
 ttn_app_id = "dev-ubg-app"
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-
+persistence_object: Persistence = None
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -45,7 +49,7 @@ def favicon():
 def home():
     if current_user.is_authenticated:
         redirect(url_for('dashboard'))
-    return render_template('home.html')
+    return redirect(url_for('login'))
 
 @app.route('/aerial')
 def aerial():
@@ -109,11 +113,57 @@ def login():
 def dashboard():
     current_user_id = User.query.filter_by(username=current_user.username).first().id
     data = []
+    #for station in Station.query.filter_by(belongs_to_user_id=current_user_id):
+    #    if station.osem_sensebox_id:
+    #        request = "https://api.opensensemap.org/boxes/{sensebox_id}".format(sensebox_id=station.osem_sensebox_id)
+    #        try:
+    #            json_response = requests.get(request).json()
+    #            data.append(json_response)
+    #        except requests.exceptions.ConnectionError:
+    #            pass
+    now = datetime.now() - timedelta(hours=1)
     for station in Station.query.filter_by(belongs_to_user_id=current_user_id):
-        if station.osem_sensebox_id:
-            request = "https://api.opensensemap.org/boxes/{sensebox_id}".format(sensebox_id=station.osem_sensebox_id)
-            json_response = requests.get(request).json()
-            data.append(json_response)
+        last_alive_query = """
+                from(bucket:"{table}") 
+                |> range(start: -1d) 
+                |> filter(fn: (r) => r._measurement == "{alive_packet_identifier}")
+                |> filter(fn: (r) => r.node_id == "{station_id}")
+                |> last()""".format(table=persistence_object.connection_data["table"],alive_packet_identifier=gardenbus_config.ALIVE_PACKET,station_id=station.id)
+        station_data = {
+            'station_name': station.station_name,
+            'station_id': station.id,
+            'sensor_data':[]
+        }
+        try:
+            query_data = json.loads(persistence_object.query(last_alive_query))
+            seconds_ago = round((now - datetime.strptime(query_data[0]["_time"], "%Y-%m-%dT%H:%M:%S.%f+00:00")).total_seconds(),1)
+            station_data['last_alive'] = seconds_ago
+        except:
+            pass
+        
+        for sensor in Sensor.query.filter_by(belongs_to_station_id=station.id):
+            sensor_model_data = SensorModel.query.filter_by(id=sensor.sensor_model_id).first()
+            
+            last_value_query = """
+                from(bucket:"{table}") 
+                |> range(start: -1d) 
+                |> filter(fn: (r) => r._measurement == "{value_response_packet_identifier}")
+                |> filter(fn: (r) => r.node_id == "{station_id}")
+                |> filter(fn: (r) => r.sensor_slot == "{sensor_slot}")
+                |> last()""".format(table=persistence_object.connection_data["table"],value_response_packet_identifier=gardenbus_config.VALUE_RESPONSE,station_id=station.id, sensor_slot=sensor.station_slot)
+            sensor_data= {
+                "model_name": sensor_model_data.model_name,
+                "phenomenon": sensor_model_data.phenomenon_name,
+                "unit": sensor_model_data.unit_name,
+            }
+            try:
+                query_data = json.loads(persistence_object.query(last_value_query))
+                sensor_data["last_value"] = round(query_data[0]["_value"],3)
+                sensor_data["seconds_ago"] = round((now - datetime.strptime(query_data[0]["_time"], "%Y-%m-%dT%H:%M:%S.%f+00:00")).total_seconds(),1)                
+            except:
+                pass
+            station_data["sensor_data"].append(sensor_data)
+        data.append(station_data)
     return render_template('dashboard.html',username=current_user.username, data=data)
 
 @app.route('/stations',methods=['GET','POST'])
@@ -128,40 +178,46 @@ def stations():
         app_key = ttn_access.generate_random_dev_eui(16)
         join_eui = '1111111111111111'
         name_of_new_sensebox = form.station_name.data
-        ttn_status_tuple = ttn_access.create_new_ttn_enddevice(join_eui=join_eui, dev_eui=dev_eui, dev_id=dev_id, app_id=ttn_app_id, app_key=app_key)
-        print("creating new enddevice status code:",ttn_status_tuple)
-        if ttn_status_tuple[0]==200 and ttn_status_tuple[1]==200 and ttn_status_tuple[2]==200 and ttn_status_tuple[3]==200:
-            osem_status_tuple = osem_access.post_new_sensebox(name_of_new_sensebox, 
-                dev_id, 
-                ttn_app_id,
-                lat=form.latitude.data,
-                lng=form.longitude.data,
-                height=form.height.data)
-            print("creating new sensebox status code:", osem_status_tuple)
+        try:
+            ttn_status_tuple = ttn_access.create_new_ttn_enddevice(join_eui=join_eui, dev_eui=dev_eui, dev_id=dev_id, app_id=ttn_app_id, app_key=app_key)
+            print("creating new enddevice status code:",ttn_status_tuple)
+            if ttn_status_tuple[0]==200 and ttn_status_tuple[1]==200 and ttn_status_tuple[2]==200 and ttn_status_tuple[3]==200:
+                osem_status_tuple = osem_access.post_new_sensebox(name_of_new_sensebox, 
+                    dev_id, 
+                    ttn_app_id,
+                    lat=form.latitude.data,
+                    lng=form.longitude.data,
+                    height=form.height.data)
+                print("creating new sensebox status code:", osem_status_tuple)
 
-            if osem_status_tuple[0]==201:
-                osem_sensebox_id = osem_status_tuple[1]
-                new_station = Station(station_name=form.station_name.data,
-                    belongs_to_user_id = current_user_id,
-                    latitude=form.latitude.data,
-                    longitude=form.longitude.data,
-                    height=form.height.data,
-                    ttn_enddevice_dev_eui = dev_eui,
-                    ttn_enddevice_dev_id = dev_id,
-                    ttn_enddevice_app_key = app_key,
-                    ttn_enddevice_join_eui= join_eui,
-                    osem_sensebox_id = osem_sensebox_id
-                )
-            
-                db.session.add(new_station)
-                db.session.commit()
+                if osem_status_tuple[0]==201:
+                    osem_sensebox_id = osem_status_tuple[1]
+                    new_station = Station(station_name=form.station_name.data,
+                        belongs_to_user_id = current_user_id,
+                        latitude=form.latitude.data,
+                        longitude=form.longitude.data,
+                        height=form.height.data,
+                        ttn_enddevice_dev_eui = dev_eui,
+                        ttn_enddevice_dev_id = dev_id,
+                        ttn_enddevice_app_key = app_key,
+                        ttn_enddevice_join_eui= join_eui,
+                        osem_sensebox_id = osem_sensebox_id
+                    )
+                    db.session.add(new_station)
+                    db.session.commit()
+                else:
+                    flash("Error creating Sensebox")
+            else:
+                flash("Error creating TTN enddevice, TTN does not like 'ä','ö','ü' or other special characters")
+        except NoInternetConnection:
+            flash("Action currently not available, no internet connection")
+
 
 
         return redirect(url_for('stations'))
     user_dict = {}
     
     own_stations = Station.query.filter_by(belongs_to_user_id=current_user_id)
-    other_stations = Station.query.filter(Station.belongs_to_user_id!=current_user_id)
     sensor_count_of_stations = {}
     for sensor in Sensor.query.all():
         if not sensor.belongs_to_station_id in sensor_count_of_stations:
@@ -170,14 +226,9 @@ def stations():
             } 
         else:
             sensor_count_of_stations[sensor.belongs_to_station_id]["count"] += 1
-    for station in other_stations:
-        user = User.query.filter_by(id=station.belongs_to_user_id).first()
-        if not user.id in user_dict:
-            user_dict[user.id] = user.username
     return render_template('stations.html',
                             form=form, 
                             own_stations=own_stations, 
-                            other_stations=other_stations, 
                             user_dict=user_dict,
                             sensor_count_of_stations=sensor_count_of_stations)
 
@@ -189,7 +240,8 @@ def sensor_model():
     if form.validate_on_submit():
         sensor_model_from_db = SensorModel.query.filter_by(model_name=form.model_name.data, phenomenon_name=form.phenomenon_name.data,unit_name=form.unit_name.data).first()
         if sensor_model_from_db:
-            print("sensor model combination already exists!")
+
+            flash("sensor model combination already exists!")
             return redirect(url_for("sensor_model"))
         else:
             print("Sensor model is new or different")
@@ -199,6 +251,7 @@ def sensor_model():
             calibration_needed=form.calibration_needed.data)
         db.session.add(new_sensor_model)
         db.session.commit()
+        flash("Sensor model created")
         return redirect(url_for("sensor_model"))
     
     available_sensors=[]
@@ -212,7 +265,6 @@ def sensor_model():
             "calibration_needed": sensor_model.calibration_needed
             }
         )  
-
     return render_template('sensor_model_creation.html',form=form, available_sensors=available_sensors)
 
 @app.route('/station/<id>',methods=['GET','POST'])
@@ -242,6 +294,7 @@ def update_station(id,extend_collapsible=True):
         sensor_form = AddNewSensorToStation()
         sensor_form.sensor_type.choices = available_sensors
         
+        actor_form = AddNewActorToStation()
         
         sensors_of_station_from_db = Sensor.query.filter_by(belongs_to_station_id = id).all()
         ttn_data= {
@@ -273,10 +326,25 @@ def update_station(id,extend_collapsible=True):
             }
             sensor_data_for_form.append(data)
 
-        blocked_slots_for_station = []
+        blocked_sensor_slots_for_station = []
         for sensor in Sensor.query.filter_by(belongs_to_station_id=id):
-            blocked_slots_for_station.append(sensor.station_slot)
-        
+            blocked_sensor_slots_for_station.append(sensor.station_slot)
+
+        actors_of_station_from_db = Actor.query.filter_by(belongs_to_station_id = id).all()
+        actor_data_for_form = []
+        for actor in actors_of_station_from_db:
+            data = {
+                "actor_id": actor.id,
+                "actor_name": actor.name,
+                "actor_slot": actor.station_slot,
+                "actor_value": actor.actor_value
+            }
+            actor_data_for_form.append(data)
+
+        blocked_actor_slots_for_station = []
+        for actor in Actor.query.filter_by(belongs_to_station_id=id):
+            blocked_actor_slots_for_station.append(actor.station_slot)
+
         python_code_example = get_code_example_for_station(station.id, 'python',ttn_data)
         lora32_code_example = get_code_example_for_station(station.id, 'lora32',ttn_data)
         return render_template('station_view.html',
@@ -286,9 +354,12 @@ def update_station(id,extend_collapsible=True):
                                 ttn_data=ttn_data, 
                                 osem_data=osem_data, 
                                 station=station, 
-                                sensor_form=sensor_form, 
+                                sensor_form=sensor_form,
+                                actor_form=actor_form,
                                 sensors=sensor_data_for_form, 
-                                blocked_slots_for_station=json.dumps(blocked_slots_for_station), 
+                                blocked_sensor_slots_for_station=json.dumps(blocked_sensor_slots_for_station), 
+                                actors=actor_data_for_form,
+                                blocked_actor_slots_for_station=json.dumps(blocked_actor_slots_for_station),
                                 extend_collapsible=json.dumps(extend_collapsible), 
                                 map=map())
     else:
@@ -320,8 +391,8 @@ def get_code_example_for_station(station_id, client_type,ttn_data):
     sensors = []    
     for sensor in Sensor.query.filter_by(belongs_to_station_id=station_id):
         sensor_model = SensorModel.query.filter_by(id=sensor.sensor_model_id).first()
-        model_name_in_snakecase = str(sensor_model.model_name).lower().replace(" ", "_").replace("-","_")
-        model_name_in_camelcase = get_model_name_in_camelcase(sensor_model.model_name)
+        model_name_in_snakecase = str(sensor_model.model_name).lower().replace(" ", "_").replace("-","_").replace("ä","ae").replace("ö","oe").replace("ü","ue").replace("ß","ss")
+        model_name_in_camelcase = get_model_name_in_camelcase(sensor_model.model_name).replace("ä","ae").replace("ö","oe").replace("ü","ue").replace("ß","ss")
         model_name_in_camelcase_first_letter_cap = list(model_name_in_camelcase)
         model_name_in_camelcase_first_letter_cap[0]=model_name_in_camelcase_first_letter_cap[0].upper()
         model_name_in_camelcase_first_letter_cap = "".join(model_name_in_camelcase_first_letter_cap)
@@ -367,6 +438,21 @@ def calibrate_sensor(sensor_id):
         return Response("Calibration value has been created", status=201)
 
 
+@app.route('/actor/set/<actor_id>', methods=['POST', 'PUT'])
+@login_required
+def set_actor_value(actor_id):
+    actor_value = request.form['actor_value']
+    try:
+        actor_value = float(actor_value)
+    except ValueError:
+        return Response("Sumbitted actor value is not a number", status=400)
+    Actor.query.filter_by(id=actor_id).update({
+            "actor_value": actor_value
+        })
+    db.session.commit()
+    return Response("Calibration value has been updated", status=204)
+    
+
 @app.route('/station/delete/<id>', methods=['GET'])
 @login_required
 def delete_station(id):
@@ -398,7 +484,7 @@ def add_sensor_to_station(station_id):
         return Response("Please provide a sensor type", status=400)
     slot = None
     try:
-        slot = int(request.form['slot'])
+        slot = int(request.form['sensor_slot'])
     except (ValueError, BadRequestKeyError):
         return Response("No valid slot supplied", status=400)
     if slot<0 or slot>255:
@@ -411,35 +497,43 @@ def add_sensor_to_station(station_id):
     if station_belongs_to_current_user:
         sensebox_id = station_query.first().osem_sensebox_id
         sensor_model = SensorModel.query.filter_by(id=sensor_model_id).first()
-        put_sensor_result = osem_access.put_new_sensor(
-                sensebox_id=sensebox_id,
-                icon='', 
-                phenomenon=sensor_model.phenomenon_name,
-                sensor_type=sensor_model.model_name,
-                unit=sensor_model.unit_name)
-        if put_sensor_result[0]==200:
-            new_sensor = Sensor(
-                belongs_to_station_id=station_id,
-                sensor_model_id=sensor_model_id,
-                station_slot=slot,
-                osem_sensor_id = put_sensor_result[1]
-            )
-            db.session.add(new_sensor)
-            db.session.commit()
-            if sensor_model.calibration_needed:
-                new_calibration_value = CalibrationValueForSensor(
-                    belongs_to_sensor_id = new_sensor.id,
-                    calibration_value=0.0
+        try:
+            put_sensor_result = osem_access.put_new_sensor(
+                    sensebox_id=sensebox_id,
+                    icon='', 
+                    phenomenon=sensor_model.phenomenon_name,
+                    sensor_type=sensor_model.model_name,
+                    unit=sensor_model.unit_name)
+            if put_sensor_result[0]==200:
+                new_sensor = Sensor(
+                    belongs_to_station_id=station_id,
+                    sensor_model_id=sensor_model_id,
+                    station_slot=slot,
+                    osem_sensor_id = put_sensor_result[1]
                 )
-                db.session.add(new_calibration_value)
-            db.session.commit()            
-            update_payload_formatter_for_ttn_enddevice(station_id)
-            return redirect(url_for('update_station', id=station_id))
-        else:
+                db.session.add(new_sensor)
+                db.session.commit()
+                if sensor_model.calibration_needed:
+                    new_calibration_value = CalibrationValueForSensor(
+                        belongs_to_sensor_id = new_sensor.id,
+                        calibration_value=0.0
+                    )
+                    db.session.add(new_calibration_value)
+                db.session.commit()            
+                update_payload_formatter_for_ttn_enddevice(station_id)
+                flash("TTN payload formatter successfully updated")
+                return redirect(url_for('update_station', id=station_id))
+            else:
+                return redirect(url_for('update_station', id=station_id))
+        except NoInternetConnection:
+            flash("Action currently not available, no internet connection")
             return redirect(url_for('update_station', id=station_id))
 
     else:
-        return Response("Station is not yours, sorry", status=403)
+        flash("This station is not yours")
+        return redirect(url_for('update_station', id=station_id), code=403)
+        
+        #return Response("Station is not yours, sorry", status=403)
 
 def update_payload_formatter_for_ttn_enddevice(station_id):
     print("updating payload formatter for station", station_id)
@@ -453,9 +547,57 @@ def update_payload_formatter_for_ttn_enddevice(station_id):
         application_id=ttn_app_id            
     )
     print("status",status)
-
     return status
 
+
+@app.route('/actor/<station_id>', methods=['POST'])
+@login_required
+def add_actor_to_station(station_id):
+    slot = None
+    try:
+        slot = int(request.form['slot'])
+    except (ValueError, BadRequestKeyError):
+        return Response("No valid slot supplied", status=400)
+    if slot<0 or slot>255:
+        return Response("Invalid slot (0-255)", status=400)
+    station_query = Station.query.filter_by(id=station_id)
+    slot_occupied = Actor.query.filter_by(belongs_to_station_id=station_id, station_slot=slot).first() != None
+    if slot_occupied:
+        print(Actor.query.filter_by(belongs_to_station_id=station_id, station_slot=slot).first().name)
+        return Response("Slot occupied", status=400)
+    station_belongs_to_current_user=User.query.filter_by(username=current_user.username).first().id == station_query.first().belongs_to_user_id
+    if station_belongs_to_current_user:
+        actor_name = request.form['actor_name']
+        new_actor = Actor(
+            name =  actor_name,
+            belongs_to_station_id = station_id,
+            station_slot = slot,
+            actor_value=0.0
+        )
+        db.session.add(new_actor)
+        db.session.commit()
+        flash("New actor "+actor_name+" added")
+        return redirect(url_for('update_station', id=station_id))
+    else:
+        return Response('not yours, sorry', status=403)    
+
+@app.route('/actor/delete/<actor_id>', methods=['POST'])
+@login_required
+def delete_actor(actor_id):
+    try:
+
+        actor_from_db = Actor.query.filter_by(id=actor_id).first()
+        corresponding_station_id = Station.query.filter_by(id=actor_from_db.belongs_to_station_id).first().id
+        station_belongs_to_current_user= User.query.filter_by(username=current_user.username).first().id == corresponding_station_id
+        if station_belongs_to_current_user:
+            db.session.query(Actor).filter(Actor.id==actor_id).delete()
+            db.session.commit()
+            flash("Actor successfully deleted")
+        else:
+            return Response("not yours", status=403)
+    except:
+        return Response("Station or actor of that station does not exist", status=404)    
+    return redirect(url_for('update_station', id=corresponding_station_id))
 
 
 @app.route('/sensor/delete/<station_id>/<slot>', methods=['POST'])
@@ -501,13 +643,16 @@ def delete_sensor(station_id, slot):
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
-        hashed_password = bcrypt.generate_password_hash(form.password.data)
-        if User.query.filter_by(username=form.username.data).first():
-            print("A user with this name already exists")
+        hashed_password = bcrypt.generate_password_hash(form.password.data)    
         new_user = User(username=form.username.data, password=hashed_password)
         db.session.add(new_user)
         db.session.commit()
+        flash('You were successfully registered')
         return redirect(url_for('login'))
+    else:
+        if User.query.filter_by(username=form.username.data).first():
+            flash("This username is taken")
+            return render_template('register.html',form=form)
     return render_template('register.html',form=form)
 
 
@@ -517,19 +662,48 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-
-if __name__ == '__main__':
+def configure_api_access():
+    global osem_access
+    global ttn_access
     config = configparser.ConfigParser()
+    
     config.read('flask_app_configuration.ini')
 
-    ttn_full_acc_key = config["TTN"]["full_account_key"]
-    ttn_username = config["TTN"]["username"]
-    ttn_app_id = config["TTN"]["app_id"]
+    try:
+        ttn_full_acc_key = config["TTN"]["full_account_key"]
+        ttn_username = config["TTN"]["username"]
+        ttn_app_id = config["TTN"]["app_id"]
+        ttn_access = TtnAccess(full_account_key=ttn_full_acc_key,
+            username=ttn_username
+        )
+        ttn_access.add_webhook_to_ttn_app(ttn_app_id,webhook_id='ugb-osem-webhook')        
+    except KeyError:
+        print("[ERROR] Flask configuration file not existent or missing required parameters, check correct filename and structure")
+    except NoInternetConnection:
+        print("[ERROR] No internet connection, could not configure API access")
+    try:
+        osem_access = OsemAccess(config["OSEM"]["email"], config["OSEM"]["password"])
+    except NoInternetConnection:
+        print("[ERROR] OsemAccess could not sign in, no internet connection")
+        osem_access = OsemAccess(config["OSEM"]["email"], config["OSEM"]["password"], auto_sign_in=False)
+        pass
 
-    osem_access = OsemAccess(config["OSEM"]["email"], config["OSEM"]["password"])
-    ttn_access = TtnAccess(full_account_key=ttn_full_acc_key,
-        username=ttn_username
-    )
-    ttn_access.add_webhook_to_ttn_app(ttn_app_id,webhook_id='ugb-osem-webhook')
+def configure_db_access():
+    global persistence_object
+    config = configparser.ConfigParser()
+    
+    config.read('flask_app_configuration.ini')
+    persistence_object = Persistence({
+            "url": config["PERSISTENCE"]["url"],
+            "token": config["PERSISTENCE"]["token"],
+            "org": config["PERSISTENCE"]["org"],
+            "debug": False,
+            "table": config["PERSISTENCE"]["table"]
+    })
 
+
+
+if __name__ == '__main__':
+    configure_api_access()
+    configure_db_access()
     app.run(debug=True, host='0.0.0.0')

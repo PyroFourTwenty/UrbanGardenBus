@@ -1,6 +1,6 @@
 import can
 from gb_headstation_utils import *
-from time import time
+from time import time, sleep
 from gardenbus_config import *
 import numpy as np
 from PersistenceLayer.persistence import Persistence
@@ -53,6 +53,7 @@ class Headstation():
                 "packet_direction": "outgoing"
             }
         })
+        self.connected_clients[node_id]["sensors"][sensor_slot]["last_value_request"] = time()
         self.send_packet(arbitration_id=arbit_id, bytes=value_request_bytes)
 
     def send_packet(self, arbitration_id, bytes: list):
@@ -177,9 +178,10 @@ class Headstation():
                     }
                 },
             }
-        self.connected_clients[node_id]["sensors"][sensor_slot] = {
+        self.connected_clients[node_id]["sensors"][sensor_slot]={
             "sensor_model_id": sensor_model_id
         }
+        self.connected_clients[node_id]["last_sensor_register_packet"] = time()
         print("[ HEAD ] Node {node} registered sensor model {sensor_model} on slot {slot}".format(
             node=node_id, sensor_model=sensor_model_id, slot=sensor_slot))
         self.db_access.write_to_db(data)
@@ -574,56 +576,66 @@ class Headstation():
 
     def check_sensor_values_for_station_and_send_lorawan_message(self):
         while self.running:
-            copied_clients = self.connected_clients.copy()
-            timeout_per_node = len(copied_clients.keys())*120
-            for node in copied_clients:
-                all_values_present = True
-                values = []
-                for sensor in sorted(copied_clients[node]["sensors"]):
-                    if not "last_value" in self.connected_clients[node]["sensors"][sensor] or self.connected_clients[node]["sensors"][sensor]["last_value"] is None:
-                        all_values_present = False
-                    else:
-                        values.append(
-                            self.connected_clients[node]["sensors"][sensor]["last_value"])
-                if all_values_present and self.forward_data_to_ttn:
-                    if len(self.connected_clients[node]["sensors"].keys()) != 0:
-                        for sensor in sorted(self.connected_clients[node]["sensors"]):
-                            self.connected_clients[node]["sensors"][sensor]["last_value"] = None
-                        payload = ''
-                        ttn_data = get_ttn_data_from_db_for_node(node)
-                        for value in values:
-                            stuff_to_add_to_payload = ''.join(
-                                [str(hex(b)).replace('0x', '') for b in np.float32(value).tobytes()])
-                            while len(stuff_to_add_to_payload) < 8:
-                                stuff_to_add_to_payload = "0"+stuff_to_add_to_payload
-                            payload += stuff_to_add_to_payload
+            try:
+                copied_clients = self.connected_clients.copy()
+                timeout_per_node = len(copied_clients.keys())*120
+                
+                for node in copied_clients:
+                    if time()-copied_clients[node]["last_sensor_register_packet"]>=30:
+                        for sensor in sorted(copied_clients[node]["sensors"]):
+                            if time()-copied_clients[node]["sensors"][sensor]["last_value_request"] >= 30:
+                                print("[ HEAD ] requesting value from node {node} on slot {slot}".format(node=node, slot=sensor))
+
+                                self.request_value(node, sensor)
+                                sleep(0.2)
+
+                
+                for node in copied_clients:
+                    all_values_present = True
+                    values = []
+                    for sensor in sorted(copied_clients[node]["sensors"]):
+                        if not "last_value" in self.connected_clients[node]["sensors"][sensor] or self.connected_clients[node]["sensors"][sensor]["last_value"] is None:
+                            all_values_present=False
+                        else:
+                            values.append(self.connected_clients[node]["sensors"][sensor]["last_value"])
+                    if all_values_present and self.forward_data_to_ttn:
+                        if len(self.connected_clients[node]["sensors"].keys())!=0:
+                            for sensor in sorted(self.connected_clients[node]["sensors"]):
+                                self.connected_clients[node]["sensors"][sensor]["last_value"] = None
+                            payload=''
+                            ttn_data = get_ttn_data_from_db_for_node(node)
+                            for value in values:
+                                stuff_to_add_to_payload= ''.join([str(hex(b)).replace('0x','') for b in np.float32(value).tobytes()]) 
+                                while len(stuff_to_add_to_payload)<8:
+                                    stuff_to_add_to_payload="0"+stuff_to_add_to_payload
+                                payload += stuff_to_add_to_payload
 
                         if not "last_lorawan_message" in self.connected_clients[node] or time()-self.connected_clients[node]["last_lorawan_message"] >= timeout_per_node:
                             if ttn_data is None:
-                                print("[ HEAD ] Node {node} is not correctly registered, so no TTN data was found".format(
-                                    node=node))
-                                self.connected_clients[node]["last_lorawan_message"] = time(
-                                )
+                                print("[ HEAD ] Node {node} is not correctly registered, so no TTN data was found".format(node=node))
+                                self.connected_clients[node]["last_lorawan_message"]=time()
                             else:
                                 print("[ HEAD ] All values present for node {node}, sending payload to TTN: {payload}".format(
-                                    node=node, 
+                                    node=node, payload=payload
                                 ))
+                                print("sending to TTN")
                                 RAK811(self.lorawan_serial).send_lorawan_message(message=payload,
-                                                                                 region='EU868',
-                                                                                 app_eui=ttn_data["app_eui"],
-                                                                                 app_key=ttn_data["app_key"],
-                                                                                 dev_eui=ttn_data["dev_eui"]
-                                                                                 )
-                                self.db_access.write_to_db({
-                                    "packet_identifier": "lorawan",
-                                    "meta": {
-                                        "node_id": node,
-                                        "packet_direction": "outgoing"
-                                    }
-                                })
-                                self.connected_clients[node]["last_lorawan_message"] = time(
+                                    region='EU868',
+                                    app_eui = ttn_data["app_eui"],
+                                    app_key = ttn_data["app_key"],
+                                    dev_eui = ttn_data["dev_eui"]
                                 )
+                                self.db_access.write_to_db({
+                                        "packet_identifier": "lorawan",
+                                        "meta":{
+                                            "node_id": node,
+                                            "packet_direction": "outgoing"
+                                        }
+                                })
+                                self.connected_clients[node]["last_lorawan_message"]=time()
                                 self.send_alive_packet()
+            except:
+                pass                        
 
     def loop(self):
         self.running = True
