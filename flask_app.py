@@ -1,7 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, request, Response, flash
 from flask_login import login_user, LoginManager, login_required, logout_user, current_user
-from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation, CreateNewSensorModelForm, AddNewActorToStation
-from models import User, Station, Sensor, SensorModel, CalibrationValueForSensor, Actor
+from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation, CreateNewSensorModelForm, AddNewActorToStation, CreateNewPostForm, CreateNewCommentForm
+from models import User, Station, Sensor, SensorModel, CalibrationValueForSensor, Actor, Post, Comment
 from CodeGeneration.code_generator import CodeGenerator
 from database import db
 from flask_bcrypt import Bcrypt
@@ -164,7 +164,26 @@ def dashboard():
                 pass
             station_data["sensor_data"].append(sensor_data)
         data.append(station_data)
-    return render_template('dashboard.html',username=current_user.username, data=data)
+    posts = []
+    for post in Post.query.order_by(Post.created.desc()).all():
+        posts.append({
+            "id": post.id,
+            "created": post.created,
+            "author_name": User.query.filter_by(id=post.author_id).first().username,
+            "header": post.header,
+            "text": post.text,
+            "comments": []
+        })
+        comments_of_post = Comment.query.filter_by(belongs_to_post_id=post.id).order_by(Comment.created.asc()).all()
+        
+        for comment in comments_of_post:
+            posts[-1]["comments"].append({
+                "created": comment.created,
+                "author_name": User.query.filter_by(id=comment.author_id).first().username,
+                "text": comment.text,
+                "id": comment.id
+            })
+    return render_template('dashboard.html',username=current_user.username, data=data, posts=posts, comment_form=CreateNewCommentForm())
 
 @app.route('/stations',methods=['GET','POST'])
 @login_required
@@ -599,6 +618,79 @@ def delete_actor(actor_id):
         return Response("Station or actor of that station does not exist", status=404)    
     return redirect(url_for('update_station', id=corresponding_station_id))
 
+@app.route('/post/create', methods=['GET', 'POST'])
+@login_required
+def create_post():
+    form = CreateNewPostForm()
+    if form.validate_on_submit():
+        user_id = User.query.filter_by(username=current_user.username).first().id
+        new_post = Post(
+            created=datetime.utcnow(),
+            author_id=user_id,
+            header=form.post_header.data,
+            text=form.post_text.data)
+        db.session.add(new_post)
+        db.session.commit()
+        flash("Sucessfully posted")
+        return redirect(url_for('dashboard'))
+    return render_template('create_post.html', form=form)    
+
+
+@app.route('/post/delete/<int:post_id>', methods=['GET'])
+@login_required
+def delete_post(post_id):
+    post = Post.query.filter_by(id=post_id).first()
+    if post:
+        user_id = User.query.filter_by(username=current_user.username).first().id
+        if user_id == post.author_id:
+            db.session.query(Post).filter(Post.id==post.id).delete()
+            db.session.query(Comment).filter(Comment.belongs_to_post_id==post.id).delete()
+            db.session.commit()
+            flash('Post deleted')
+            return redirect(url_for('dashboard'))
+        else:
+            return Response("This post does not belong to you", status=403)
+    else:
+        return Response("This post does not exist", status=404)
+
+
+@app.route('/post/comment/<int:post_id>', methods=['POST'])
+@login_required
+def create_comment(post_id):
+    form = CreateNewCommentForm()
+    post_exists = Post.query.filter_by(id=post_id).first()
+    if post_exists:
+        user_id = User.query.filter_by(username=current_user.username).first().id
+        if form.validate_on_submit():
+            new_comment = Comment(
+                created=datetime.utcnow(),
+                author_id=user_id,
+                belongs_to_post_id=post_id,
+                text=form.comment_text.data
+            )
+            
+            db.session.add(new_comment)
+            db.session.commit()
+            flash("Comment posted")
+            print("post comment created")
+            return redirect(url_for('dashboard'))
+    else:
+        return Response('Post not found', status=404)
+
+@app.route('/post/comment/delete/<int:comment_id>')
+@login_required
+def delete_comment(comment_id):
+    comment = Comment.query.filter_by(id=comment_id).first()
+    if comment:
+        user_id = User.query.filter_by(username=current_user.username).first().id
+        if user_id == comment.author_id:
+            db.session.query(Comment).filter(Comment.id==comment_id).delete()
+            db.session.commit()
+            flash('Comment deleted')
+            return redirect(url_for('dashboard'))
+        else:
+            return Response("This comment does not belong to you", status=403)
+    return Response("This comment does not exist", status=404)
 
 @app.route('/sensor/delete/<station_id>/<slot>', methods=['POST'])
 @login_required
@@ -686,7 +778,6 @@ def configure_api_access():
     except NoInternetConnection:
         print("[ERROR] OsemAccess could not sign in, no internet connection")
         osem_access = OsemAccess(config["OSEM"]["email"], config["OSEM"]["password"], auto_sign_in=False)
-        pass
 
 def configure_db_access():
     global persistence_object
