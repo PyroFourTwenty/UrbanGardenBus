@@ -16,6 +16,8 @@ import re
 import configparser
 from datetime import datetime, timedelta
 from PersistenceLayer.persistence import Persistence
+from PersistenceLayer.mock_persistence import MockPersistence
+
 import gardenbus_config
 
 app = Flask(__name__)
@@ -693,17 +695,19 @@ def configure_db_access():
     config = configparser.ConfigParser()
     
     config.read('flask_app_configuration.ini')
-    persistence_object = Persistence({
-            "url": config["PERSISTENCE"]["url"],
-            "token": config["PERSISTENCE"]["token"],
-            "org": config["PERSISTENCE"]["org"],
-            "debug": False,
-            "table": config["PERSISTENCE"]["table"]
-    })
+    # use mock persistence object
+    persistence_object = MockPersistence()
+    #persistence_object = Persistence({
+    #        "url": config["PERSISTENCE"]["url"],
+    #        "token": config["PERSISTENCE"]["token"],
+    #        "org": config["PERSISTENCE"]["org"],
+    #        "debug": False,
+    #        "table": config["PERSISTENCE"]["table"]
+    #})
 
 
 
 if __name__ == '__main__':
     configure_api_access()
     configure_db_access()
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=False, host='0.0.0.0')
