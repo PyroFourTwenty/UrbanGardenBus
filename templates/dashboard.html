@@ -275,7 +275,8 @@
             {% endif %}
             <div class="post_text">{{post['text']}}</div>
             <div class="comment_section">
-            
+            <button onclick="postReaction({{post['id']}},'thumbsup')">{{post["reactions"]["thumbsup"]}}👍</button>
+            <button onclick="postReaction({{post['id']}},'thumbsdown')">{{post["reactions"]["thumbsdown"]}}👎</button>
             {% for comment in post["comments"] %}
                 <div class="comment_container">
                     {% if username==comment['author_name'] %}
@@ -322,11 +323,12 @@
         }else if(type=="comment"){
             if(confirm("Do you want to delete that comment?")){
                 window.location="/post/comment/delete/"+id;
-
             }
-
         }
+    }
 
+    function postReaction(postId, type){
+        window.location = "/post/react/"+postId+"/"+type;
     }
 </script>
 
