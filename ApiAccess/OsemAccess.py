@@ -2,7 +2,16 @@ import requests
 import json
 from time import time
 from .ApiAccessExceptions import InvalidCredentials, NoInternetConnection
+
 class OsemAccess:
+    # This class is a wrapper for the OpenSenseMap API. Its capabilities are: 
+    # - sign in given a valid email and password combination (sign in is automatically peformed on initialization if auto_sign_in is set to True)
+    # - retrieval of an auth token, that will be used to authenticate operations after sign in (auth token will be auto-refreshed if the token expired)
+    # - retrieval of the names and ids of all senseboxes of the user
+    # - retrieval of all sensor ids of a sensebox
+    # - creation of new senseboxes with a dummy sensor (a sensebox has to have at least one sensor at all times, which is why we have to create a dummy sensor)
+    # - deletion of a sensebox
+    # - creation/deletion of sensors of a sensebox (when adding the first sensor to a sensebox, the obligatory dummy sensor will be deleted automatically)
     email: str = ''
     password: str = ''
     auth_token = ''
@@ -10,9 +19,9 @@ class OsemAccess:
     last_sign_in = None
     refresh_sign_in_after_seconds = 10*60 # 10 minutes
     def __init__(self, email: str = '', password: str = '', auto_sign_in = True):
-        self.email = email
+        self.email = email 
         self.password = password
-        if auto_sign_in:
+        if auto_sign_in: # if auto-signin is enabled, try to sign in
             self.sign_in()
 
     def sign_in(self):
@@ -53,7 +62,6 @@ class OsemAccess:
         for box in response.json()['data']['boxes']:
             sensebox_names.append((box['name'],box['_id']))
             #print(box['name'],'has id',box['_id'])
-
         return sensebox_names
 
     def get_sensor_ids_of_sensebox(self, sensebox_id):
