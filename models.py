@@ -59,3 +59,9 @@ class Comment(db.Model):
     author_id = db.Column(db.Integer, nullable=False)
     belongs_to_post_id = db.Column(db.Integer, nullable=False)
     text = db.Column(db.String(512), nullable=False)
+
+class PostReaction(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    belongs_to_user_id = db.Column(db.Integer, nullable=False)
+    belongs_to_post_id = db.Column(db.Integer, nullable=False)
+    reaction_type = db.Column(db.String(32), nullable=False)
