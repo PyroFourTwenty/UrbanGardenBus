@@ -16,6 +16,8 @@ import re
 import configparser
 from datetime import datetime, timedelta
 from PersistenceLayer.persistence import Persistence
+from PersistenceLayer.mock_persistence import MockPersistence
+
 import gardenbus_config
 
 app = Flask(__name__) # initialize Flask app
@@ -873,9 +875,7 @@ def configure_db_access():
     except KeyError:
         print("[ERROR] Datasource config is not valid")
 
-
-
 if __name__ == '__main__':
     configure_api_access()
     configure_db_access()
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=False, host='0.0.0.0')
