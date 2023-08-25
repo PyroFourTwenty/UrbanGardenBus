@@ -1,7 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, request, Response, flash
 from flask_login import login_user, LoginManager, login_required, logout_user, current_user
 from forms import LoginForm, RegisterForm, CreateNewStation, AddNewSensorToStation, CreateNewSensorModelForm, AddNewActorToStation, CreateNewPostForm, CreateNewCommentForm
-from models import User, Station, Sensor, SensorModel, CalibrationValueForSensor, Actor, Post, Comment, PostReaction
+from models import User, Station, Sensor, SensorModel, CalibrationValueForSensor, Actor, Post, Comment, PostReaction, SetActorValue
 from CodeGeneration.code_generator import CodeGenerator
 from database import db
 from flask_bcrypt import Bcrypt
@@ -137,9 +137,11 @@ def dashboard():
         } # init the dictionary for the station data, that will be shown on the dashboard
         try:
             query_data = json.loads(persistence_object.query(last_alive_query)) # execute the InfluxDB query for the last "ALIVE" packet of the station
-            seconds_ago = round((now - datetime.strptime(query_data[0]["_time"], "%Y-%m-%dT%H:%M:%S.%f+00:00")).total_seconds(),1) # format the time of the last "ALIVE" as a difference of time to now (in seconds)
-            station_data['last_alive'] = seconds_ago # write the second difference in the station dictionary
-        except:
+            if len(query_data)>0:
+                seconds_ago = round((now - datetime.strptime(query_data[0]["_time"], "%Y-%m-%dT%H:%M:%S.%f+00:00")).total_seconds(),1) # format the time of the last "ALIVE" as a difference of time to now (in seconds)
+                station_data['last_alive'] = seconds_ago # write the second difference in the station dictionary
+        except Exception as e:
+            print(e)
             pass # if any exception occurs here (ie. if no "ALIVE" packet was found for that station), just ignore it
         
         for sensor in Sensor.query.filter_by(belongs_to_station_id=station.id): # query every registered sensor of that station 
@@ -158,9 +160,11 @@ def dashboard():
             } # create the sensor dictionary with all info
             try:
                 query_data = json.loads(persistence_object.query(last_value_query)) # get the last "VALUE_REPONSE" from InfluxDB
-                sensor_data["last_value"] = round(query_data[0]["_value"],3) # round the sensor value and write it into our sensor data dictionary
-                sensor_data["seconds_ago"] = round((now - datetime.strptime(query_data[0]["_time"], "%Y-%m-%dT%H:%M:%S.%f+00:00")).total_seconds(),1) # write the time of the sensor value into our sensor data dictionary                
-            except:
+                if len(query_data)>0:
+                    sensor_data["last_value"] = round(query_data[0]["_value"],3) # round the sensor value and write it into our sensor data dictionary
+                    sensor_data["seconds_ago"] = round((now - datetime.strptime(query_data[0]["_time"], "%Y-%m-%dT%H:%M:%S.%f+00:00")).total_seconds(),1) # write the time of the sensor value into our sensor data dictionary                
+            except Exception as e:
+                print(e)
                 pass # if any exception occurs, just ignore it
             station_data["sensor_data"].append(sensor_data) # append the collected sensor data to our station data
         data.append(station_data) # append the collected station data (with the sensor data) to our data list 
@@ -476,23 +480,23 @@ def calibrate_sensor(sensor_id):
         db.session.commit() # save the changes to the database
         return Response("Calibration value has been created", status=201) # respond with status 201
 
-
-@app.route('/actor/set/<actor_id>', methods=['POST', 'PUT'])
-@login_required 
-def set_actor_value(actor_id):
+@app.route('/actor/set/<station_id>/<actor_slot>', methods=['POST', 'PUT'])
+@login_required
+def set_actor_value(station_id, actor_slot):
     # this route lets the user set a desired value for an actor
     # TODO check if the actor belongs to the user
-    actor_value = request.form['actor_value'] # get the new actor value from the POST body 
+    actor_value = request.form['actor_value']
     try:
         actor_value = float(actor_value) # try to cast the value
     except ValueError: # if the value is not a float, a ValueError will be thrown
         return Response("Sumbitted actor value is not a number", status=400) # respond with status 400
-    Actor.query.filter_by(id=actor_id).update({ # update the actor value in the database 
+    Actor.query.filter_by(belongs_to_station_id=station_id, station_slot=actor_slot).update({ # update the actor value in the database 
             "actor_value": actor_value
         })
+    new_set_actor_value = SetActorValue(belongs_to_station_id=station_id, station_slot=actor_slot, actor_value=actor_value)
+    db.session.add(new_set_actor_value)
     db.session.commit() # write changes to the database
     return Response("Calibration value has been updated", status=204) # respond with status 204
-    
 
 @app.route('/station/delete/<id>', methods=['GET'])
 @login_required # login is required to check if station belongs to the user 
@@ -604,6 +608,7 @@ def add_actor_to_station(station_id):
         return Response("Invalid slot (0-255)", status=400) # respond with status 400
     station_query = Station.query.filter_by(id=station_id).first() # get station from database  
     slot_occupied = Actor.query.filter_by(belongs_to_station_id=station_id, station_slot=slot).first() != None # check if the slot is in use
+
     if slot_occupied:
         return Response("Slot occupied", status=400) # respond with 400 status
     station_belongs_to_current_user=User.query.filter_by(username=current_user.username).first().id == station_query.belongs_to_user_id # check if the station belongs to the user
@@ -623,23 +628,23 @@ def add_actor_to_station(station_id):
     else: # if the station does not belong to the user
         return Response('not yours, sorry', status=403) # respond with 403 status    
 
-@app.route('/actor/delete/<actor_id>', methods=['POST'])
+@app.route('/actor/delete/<station_id>/<actor_slot>', methods=['POST'])
 @login_required
-def delete_actor(actor_id):
-    # This route lets users delete actors by id
+def delete_actor(station_id, actor_slot):
+    # This route lets users delete actors by station id and actor slot
     try:
-        actor_from_db = Actor.query.filter_by(id=actor_id).first() # get the actor from database
-        corresponding_station_id = Station.query.filter_by(id=actor_from_db.belongs_to_station_id).first().id # find the station the actor belongs to
-        station_belongs_to_current_user= User.query.filter_by(username=current_user.username).first().id == corresponding_station_id # check user privileges
+        actor_from_db = Actor.query.filter_by(belongs_to_station_id=station_id, station_slot=actor_slot).first() # get the actor from database
+        corresponding_station = Station.query.filter_by(id=station_id).first()  # find the station the actor belongs to
+        station_belongs_to_current_user = User.query.filter_by(username=current_user.username).first().id == corresponding_station.belongs_to_user_id # check user privileges
         if station_belongs_to_current_user: # if the user has the right to delete the actor
-            db.session.query(Actor).filter(Actor.id==actor_id).delete() # delete it
+            db.session.query(Actor).filter(Actor.id==actor_from_db.id).delete()  # delete it
             db.session.commit() # write changes to database
             flash("Actor successfully deleted") # tell the user the actor was deleted
-        else: # station doesn not belong to user
-            return Response("not yours", status=403) # tell the user 
+        else:  # if the station does not belong to user
+            return Response("not yours", status=403) # tell the user
     except: # TODO improve the exception handling by making the response more precise 
         return Response("Station or actor of that station does not exist", status=404) # if station or actor was not found, tell the user and send a 404 status
-    return redirect(url_for('update_station', id=corresponding_station_id)) # if everything worked as expected, redirect the user
+    return redirect(url_for('update_station', id=corresponding_station.id)) # if everything worked as expected, redirect the user
 
 @app.route('/post/create', methods=['GET', 'POST'])
 @login_required # login is required to retrieve information, which user wants to create a post
