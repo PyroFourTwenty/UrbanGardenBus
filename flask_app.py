@@ -601,7 +601,7 @@ def add_actor_to_station(station_id):
     # This route lets the user add new actors to a station
     slot = None 
     try:
-        slot = int(request.form['slot']) # try to cast the supplied actor slot to an integer 
+        slot = int(request.form['actor_slot']) # try to cast the supplied actor slot to an integer 
     except (ValueError, BadRequestKeyError): # if the slot cannot be cast to an integer or doesnt exist at all
         return Response("No valid slot supplied", status=400) # respond with status 400
     if slot<0 or slot>255: # check slot for invalid range 
