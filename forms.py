@@ -2,6 +2,7 @@ from flask_wtf import FlaskForm
 
 from wtforms import StringField, PasswordField, FloatField, SubmitField, SelectField, IntegerField, BooleanField
 from wtforms.validators import InputRequired,Length,ValidationError,NumberRange
+from wtforms.widgets import TextArea
 from models import User
 class LoginForm(FlaskForm):
     username = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder":"Username"})
@@ -47,3 +48,12 @@ class CreateNewSensorModelForm(FlaskForm):
     unit_name = StringField(validators=[InputRequired(),Length(max=256)], render_kw={"placeholder":"Unit of the measurement (ie. '°C')"})
     calibration_needed = BooleanField(render_kw={"placeholder": "Calibration required for this sensor?"})
     submit = SubmitField("Save sensor model")
+
+class CreateNewPostForm(FlaskForm):
+    post_header = StringField(validators=[Length(max=128)], render_kw={"placeholder":"Interesting title (optional)"}) 
+    post_text = StringField(validators=[InputRequired(),Length(max=1024)], render_kw={"placeholder":"What do you want to say?"}, widget=TextArea()) 
+    submit = SubmitField("Post")
+
+class CreateNewCommentForm(FlaskForm):
+    comment_text = StringField(validators=[InputRequired(),Length(max=512)], render_kw={"placeholder":"What are your thoughts?"})
+    submit = SubmitField("Comment")

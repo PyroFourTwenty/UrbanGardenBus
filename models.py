@@ -1,6 +1,6 @@
 from flask_login import UserMixin
 from database import db
-
+from datetime import datetime
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key = True)
     username = db.Column(db.String(20), nullable=False, unique=True)
@@ -45,3 +45,23 @@ class Actor(db.Model):
     belongs_to_station_id = db.Column(db.Integer, nullable=False)
     station_slot = db.Column(db.Integer, nullable=False)
     actor_value = db.Column(db.Float, default = 0.0, nullable=False)
+
+class Post(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    created = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    author_id = db.Column(db.Integer, nullable=False)
+    header = db.Column(db.String(128), nullable=True)
+    text = db.Column(db.String(1024), nullable=False)
+
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    created = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    author_id = db.Column(db.Integer, nullable=False)
+    belongs_to_post_id = db.Column(db.Integer, nullable=False)
+    text = db.Column(db.String(512), nullable=False)
+
+class PostReaction(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    belongs_to_user_id = db.Column(db.Integer, nullable=False)
+    belongs_to_post_id = db.Column(db.Integer, nullable=False)
+    reaction_type = db.Column(db.String(32), nullable=False)
