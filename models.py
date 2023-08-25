@@ -46,6 +46,12 @@ class Actor(db.Model):
     station_slot = db.Column(db.Integer, nullable=False)
     actor_value = db.Column(db.Float, default = 0.0, nullable=False)
 
+class SetActorValue(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    belongs_to_station_id = db.Column(db.Integer, nullable=False)
+    station_slot = db.Column(db.Integer, nullable=False)
+    actor_value = db.Column(db.Float, default = 0.0, nullable=False)
+
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key = True)
     created = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

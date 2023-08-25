@@ -366,6 +366,7 @@
         <input id="ttn_join_eui" type="text" value="{{ttn_data['join_eui']}}" disabled>
         <h1>OpenSenseMap</h1>
         <label>OpenSenseMap Sensebox Id:</label>
+        <a href="https://opensensemap.org/explore/{{osem_data['sensebox_id']}}">Link to sensebox in OpenSenseMap</a>
         <input id="osem_id" type="text" value="{{osem_data['sensebox_id']}}" disabled>
     </div>
     <button id="sensor-collapsible" type="button" onClick="toggleCollapsible(this.id)" class="collapsible">Add, delete
@@ -455,7 +456,7 @@
                     {{ actor["actor_slot"] }}
                 </td>
                 <td>
-                    <form method="POST" action="{{url_for('set_actor_value', actor_id=actor['actor_id'])}}"
+                    <form method="POST" action="{{url_for('set_actor_value', station_id=station.id, actor_slot=actor['actor_slot'])}}"
                         onsubmit="return false;">
                         <input onfocusout="this.form.submit(); return false;"
                             onkeypress='javascript: if(event.key==="Enter"){event.preventDefault();this.form.submit();return false;}'
@@ -465,7 +466,7 @@
                     </td>
                     <td>
                         <form method="POST"
-                            action="{{url_for('delete_actor', actor_id=actor['actor_id'])}}"
+                            action="{{url_for('delete_actor', station_id=station.id, actor_slot=actor['actor_slot'])}}"
                             onsubmit="return confirm('Are you sure you want to delete {{actor['actor_name']}} on slot {{actor['actor_slot']}}?');">
                         <button class="delete" type="submit">Delete</button>
                     </form>
