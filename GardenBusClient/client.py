@@ -165,6 +165,40 @@ class GardenBusClient():
                                         bytes=calibration_ack_bytes)
                         return True
 
+    def send_actor_set_packet(self,node_id, actor_slot, value, wait_for_ack=True, ack_timeout=10):
+        arbit_id=100
+        actor_set_bytes = [
+            config.ACTOR_SET,
+            *utils.number_to_bytes(node_id, 2),
+            *utils.number_to_bytes(actor_slot),
+            *list(np.float32(value).tobytes())
+        ]
+        self.send_packet(arbitration_id=arbit_id, bytes=actor_set_bytes)
+        if wait_for_ack:
+            timestamp = time()
+            while(time()-timestamp < ack_timeout):
+                msg = self.bus.recv(timeout=0.01)
+                if msg is not None:
+                    if msg.data[0]==config.ACTOR_SET_ACK:
+                        node_id_from_packet = utils.bytes_to_number(
+                            msg.data[1:3])
+                        slot_from_packet= utils.byte_to_number(msg.data[3])
+                        value_bytes = msg.data[4:9]
+                        set_value_from_packet = float(
+                            np.frombuffer(value_bytes, dtype=np.float32))
+                        if node_id_from_packet==node_id and set_value_from_packet==np.float32(value) and slot_from_packet==actor_slot:
+                            print("[ {node_id} ] Node {target} set actor on slot {slot} to value {value}".format(
+                                node_id=self.node_id,
+                                target=node_id_from_packet,
+                                slot=actor_slot,
+                                value=value
+                                )
+                            )
+                            return True
+            return False
+        else:
+            return True
+
     def handle_value_request(self, sensor_slot):
         arbit_id = 100
         # send value request ACK packet
@@ -211,6 +245,9 @@ class GardenBusClient():
 
     def calibrate_sensor(self, sensor: GardenBusSensor, sensor_slot, resend_count= 6, response_timeout= 30):
         return self.send_calibration_request_packet(sensor_model_id=sensor.sensor_model_id, sensor_slot=sensor_slot, resend_count=resend_count, response_timeout=response_timeout)
+
+    def set_actor_of_node(self, node_id, actor_slot, value, wait_for_ack=True, ack_timeout=10):
+        return self.send_actor_set_packet(node_id=node_id, actor_slot=actor_slot, value=value, wait_for_ack=True, ack_timeout=ack_timeout)
 
     def send_lorawan_message(self):
         import numpy as np
