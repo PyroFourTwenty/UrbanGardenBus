@@ -2,7 +2,7 @@ from GardenBusClient.SupportedSensors import supported_sensors
 import struct
 from flask_app import app
 from flask_sqlalchemy import SQLAlchemy
-from models import Station, Sensor, CalibrationValueForSensor
+from models import Station, Sensor, CalibrationValueForSensor, SetActorValue
 
 db = SQLAlchemy(app)
 
@@ -55,6 +55,32 @@ def get_ttn_data_from_db_for_node(node_id):
             return ttn_data
         except:
             pass
+
+def get_all_set_actor_values_from_db():
+    with app.app_context():
+        all_set_actor_values_list = []
+        try:
+            all_set_actor_values = SetActorValue.query.all()
+            for set_actor_value in all_set_actor_values:
+                all_set_actor_values_list.append({
+                    "belongs_to_station_id": set_actor_value.belongs_to_station_id,
+                    "station_slot": set_actor_value.station_slot,
+                    "actor_value": set_actor_value.actor_value
+                })
+        except:
+            pass
+        return all_set_actor_values_list
+
+def delete_set_actor_value_from_db(node_id, station_slot, actor_value):
+    with app.app_context():
+        try:
+            delete_set_actor_value = SetActorValue.__table__.delete().where(SetActorValue.belongs_to_station_id==node_id,SetActorValue.station_slot==station_slot,SetActorValue.actor_value==actor_value)
+            db.session.execute(delete_set_actor_value)
+            db.session.commit()
+        except Exception as e:
+
+            print("Something went wrong while deleting SetActorValue for node {node} on actor slot {slot}".format(node=node_id,slot=station_slot))
+            print(e)
 
 def get_model_id_of_sensor_of_node(node_id, sensor_slot):
     with app.app_context():

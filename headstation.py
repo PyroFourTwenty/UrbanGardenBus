@@ -108,6 +108,7 @@ class Headstation():
             self.connected_clients[node_id] = {
                 "last_alive": time(),
                 "sensors": {},
+                "actors":{}
             }
             print('[ HEAD ] Node {node_id} joined the network'.format(
                 node_id=node_id))
@@ -172,6 +173,7 @@ class Headstation():
         if not node_id in self.connected_clients:
             self.connected_clients[node_id] = {
                 "last_alive": time(),
+                "actors": {},
                 "sensors": {
                     sensor_slot: {
                         sensor_model_id: sensor_model_id
@@ -185,6 +187,23 @@ class Headstation():
         print("[ HEAD ] Node {node} registered sensor model {sensor_model} on slot {slot}".format(
             node=node_id, sensor_model=sensor_model_id, slot=sensor_slot))
         self.db_access.write_to_db(data)
+
+    def handle_actor_registered(self, node_id: int, actor_slot: int):
+        arbit_id = 99
+        if not node_id in self.connected_clients:
+            self.connected_clients[node_id] = {
+                "last_alive": time(),
+                "actors": {
+                },
+                "sensors": {}
+            }
+        self.connected_clients[node_id]["actors"][actor_slot]={
+                "last_value": None
+        }
+        bytes = [ACTOR_REGISTER_ACK, *number_to_bytes(node_id, 2), *number_to_bytes(actor_slot)]
+        self.send_packet(arbitration_id=arbit_id, bytes=bytes)        
+        print("[ HEAD ] Node {node} registered actor on slot {slot}".format(node=node_id, slot=actor_slot))
+            
 
     def handle_sensor_unregistered(self, node_id: int, sensor_slot: int):
         arbit_id = 99
@@ -496,7 +515,20 @@ class Headstation():
                     self.connected_clients[node_id]["sensors"][slot]["last_value"] = value
             print("[ HEAD ] Node {node_id} has responded to the value request on slot {slot} (value is {value})".format(
                 node_id=node_id, slot=slot, value=value))
-        
+        elif packet_identifier == ACTOR_REGISTER:
+            node_id = bytes_to_number(data[1:3])
+            slot = byte_to_number(data[3])
+            self.handle_actor_registered(node_id, slot)
+            self.db_access.write_to_db({
+                "packet_identifier": ACTOR_REGISTER,
+                "meta": {
+                    "node_id": node_id,
+                    "actor_slot": slot,
+                    "packet_direction": "ingoing"
+                }
+            })
+
+
         elif packet_identifier == PARTIAL_TRANSFER_ID_REQUEST:
             node_id = bytes_to_number(data[1:3])
             length = bytes_to_number(data[3:6])
@@ -569,8 +601,7 @@ class Headstation():
                     "packet_direction": "ingoing",
                     "transfer_id": transfer_id,
                 }
-            })
-
+            })            
         else:
             print("[ HEAD ] received bytes:", data)
 
@@ -637,14 +668,54 @@ class Headstation():
             except:
                 pass                        
 
+    def set_actors(self):
+        arbit_id = 99
+        while(self.running):
+            try:
+                all_set_actor_values = get_all_set_actor_values_from_db()
+                for set_actor_value in all_set_actor_values:
+                    set_actor_bytes = [
+                        ACTOR_SET,
+                        *number_to_bytes(set_actor_value["belongs_to_station_id"],2),
+                        *number_to_bytes(set_actor_value["station_slot"]),
+                        *list(np.float32(set_actor_value["actor_value"]).tobytes())
+                    ]
+                    print("[ HEAD ] Instructing node {node} to set actor {actor} to value {value}".format(
+                                        node=set_actor_value["belongs_to_station_id"], actor=set_actor_value["station_slot"],value=set_actor_value["actor_value"]
+                            )
+                        )
+                    self.send_packet(arbitration_id=arbit_id, bytes=set_actor_bytes)
+                    self.db_access.write_to_db({
+                        "packet_identifier": ACTOR_SET,
+                        "meta": {
+                            "node_id": set_actor_value["belongs_to_station_id"],
+                            "sensor_slot": set_actor_value["station_slot"],
+                            "packet_direction": "outgoing"
+                        },
+                        "payload": {
+                            "value": set_actor_value["actor_value"]
+                        }
+                    })
+                    delete_set_actor_value_from_db(node_id=set_actor_value["belongs_to_station_id"], station_slot=set_actor_value["station_slot"], actor_value=set_actor_value["actor_value"])
+                    sleep(0.2)
+            except Exception as e:
+                print("Actor setter encountered a problem:")
+                print(e)
+            sleep(1)
+                
+        
     def loop(self):
         self.running = True
         value_checker = Thread(
             target=self.check_sensor_values_for_station_and_send_lorawan_message, args=(), daemon=True)
         print("[ HEAD ] starting value checker")
         value_checker.start()
+        actor_setter = Thread(target=self.set_actors, args=(), daemon=True)
+        print("[ HEAD ] starting actor setter")
+        actor_setter.start()
         print("[ HEAD ] starting to loop")
         self.send_entry_packet()
+        sleep(0.1)
         while self.running:
             if time()-self.__last_alive >= self.tick_rate:
                 self.send_alive_packet()
