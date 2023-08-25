@@ -12,6 +12,17 @@
         src: url("{{ url_for('static', filename='MinSans-Light.otf') }}");
     }
 
+    .alert {
+        position: relative;
+        z-index: 1;
+        background: #FFFFFF;
+        max-width: 360px;
+        margin: 0 auto 30px;
+        padding: 15px;
+        text-align: center;
+        box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24);
+    }
+
     html {
         background: url("static/aerial.jpg") no-repeat center center fixed;
         background-size: cover;
@@ -125,6 +136,75 @@
         width: 100%;
         height: 100%;
     }
+    .post_content, .comment_section{
+        background: rgba(255, 255, 255, 0.2);
+        margin: 10px;
+        box-shadow: 3px 3px 5px 3px grey;
+        border-radius: 5px;
+
+    }
+
+    .post_author, .post_created_date, .post_header {
+        margin: 10px;
+    }
+
+    .post_text{
+        margin: 15px;
+        height:30px;
+        white-space: pre-wrap;
+        overflow:hidden;
+        word-break: break-all;
+        height:1%;
+    }
+    .comment_author_name, .comment_text{
+        margin: 15px;
+    }
+
+    input[type=text]{
+        width : 85%;
+        padding: 12px 20px;
+        margin: 8px 0;
+        display: inline-block;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+    input[type=submit] {
+        width: 10%;
+        background-color: #4CAF50;
+        color: white;
+        padding: 14px 20px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    input[type=submit]:hover {
+        background-color: #45a049;
+    }
+    .comment_container{
+        margin: 3px;
+        border-bottom: 2px solid rgb(159, 159, 159);
+        padding: 3px 3px;
+    }
+
+    .comment_created_date, .post_created_date{
+        padding: 3px 3px;
+        font-size: 10px;
+        color: rgb(105, 105, 105);
+    }
+
+    .delete_icon{
+        text-decoration: none;
+        position:absolute;
+        top:0;
+        right:0;
+    }
+
+    .delete_div{
+        position:relative;
+    }
+
 </style>
 {% endblock %}
 
@@ -167,21 +247,59 @@
             <div style="padding-left: 5px;">offline</div>
         </div>
     </div>
-    {% endif %}
-    {% for sensor in station["sensor_data"] %}
-    <div>
-        {{sensor["model_name"]}}:
+            {% endif %}
+        {% for sensor in station["sensor_data"] %}
+        <div>
+            {{sensor["model_name"]}}:
 
-        {% if "last_value" in sensor %}
-        {{sensor["last_value"]}} {{sensor["unit"]}} ({{sensor["seconds_ago"]}} seconds ago)
-        {% else %}
-        no value
-        {% endif %}
-    </div>
+            {% if "last_value" in sensor %}
+            {{sensor["last_value"]}} {{sensor["unit"]}} ({{sensor["seconds_ago"]}} seconds ago)
+            {% else %}
+            no value
+            {% endif %}
+        </div>
+        {% endfor %}
     {% endfor %}
-
-
+    <br>
+    <a href="{{url_for('create_post')}}" onclick="">🖊️ Post something</a>
+    
+    {% for post in posts %}
+        <div id="{{post['id']}}" class="post_content">
+            {% if username==post['author_name'] %}
+                <div class="delete_div"><a class="delete_icon" href="javascript:confirmDeletion('post',{{post['id']}})">❌</a></div>
+            {% endif %}
+            <div class="post_created_date">{{post['created']}}</div>
+            <div class="post_author"><u>{{post['author_name']}}</u> posted:</div>
+            {% if post['header']|length %}
+                <h3 class="post_header">{{post['header']}}</h3>
+            {% endif %}
+            <div class="post_text">{{post['text']}}</div>
+            <div class="comment_section">
+            <button onclick="postReaction({{post['id']}},'thumbsup')">{{post["reactions"]["thumbsup"]}}👍</button>
+            <button onclick="postReaction({{post['id']}},'thumbsdown')">{{post["reactions"]["thumbsdown"]}}👎</button>
+            {% for comment in post["comments"] %}
+                <div class="comment_container">
+                    {% if username==comment['author_name'] %}
+                        <div class="delete_div"><a class="delete_icon" href="javascript:confirmDeletion('comment',{{comment['id']}})">❌</a></div>
+                    {% endif %}
+    
+                    <div class="comment_created_date">{{comment['created']}}</div>
+                    <div class="comment_author"><u>{{comment["author_name"]}}</u> commented:</div>
+                    <div class="comment_text">{{comment['text']}}</div>
+                </div>
+            {% endfor %}
+            <form class="comment_form" action="{{url_for('create_comment', post_id=post.id)}}" method="POST">
+                <div>
+                {{comment_form.hidden_tag()}}
+                {{comment_form.comment_text}}
+                {{comment_form.submit}}   
+            </div>
+            </form>
+            </div>
+        </div>
     {% endfor %}
+    
+
 </div> 
 <script>
     var toggle = false;
@@ -196,7 +314,24 @@
             document.getElementById("main").style.marginLeft = "0";
         }
     }
+
+    function confirmDeletion(type, id){
+        if (type=="post"){
+            if(confirm("Do you want to delete that post?")){
+                window.location="/post/delete/"+id;
+            }
+        }else if(type=="comment"){
+            if(confirm("Do you want to delete that comment?")){
+                window.location="/post/comment/delete/"+id;
+            }
+        }
+    }
+
+    function postReaction(postId, type){
+        window.location = "/post/react/"+postId+"/"+type;
+    }
 </script>
+
 {% endblock %}
 
 </html>
