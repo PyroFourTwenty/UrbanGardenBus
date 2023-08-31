@@ -2,6 +2,7 @@ import can
 import sys
 import math
 from GardenBusClient.sensor import GardenBusSensor
+from GardenBusClient.actor import GardenBusActor
 from . import gb_utils as utils
 from . import gardenbus_config as config
 from time import time, sleep
@@ -15,6 +16,7 @@ class GardenBusClient():
     bus: can.interface.Bus = None
     node_id = None
     sensors = {}
+    actors = {}
     tick_rate: float = None  # defines the rate at that the node sends alive packets
     # as well as other periodically timed packets (in seconds)
     running = False
@@ -70,6 +72,34 @@ class GardenBusClient():
         arbit_id = 100
         bytes = [2, *utils.number_to_bytes(self.node_id, 2)]
         return self.send_packet(arbitration_id=arbit_id, bytes=bytes)
+
+    def send_register_actor_packet(self, actor: GardenBusActor, resend_count: int = 6, response_timeout: float = 30):
+        arbit_id = 100
+        self.actors[actor.actor_slot] = actor
+        bytes = [
+            config.ACTOR_REGISTER,
+            *utils.number_to_bytes(self.node_id, 2),
+            *utils.number_to_bytes(actor.actor_slot),
+        ]
+        for _ in range(resend_count):
+            self.send_packet(arbitration_id=arbit_id, bytes=bytes)
+            timestamp = time()
+            while (self.running and time()-timestamp < response_timeout):
+                msg = self.bus.recv(timeout=0.01)
+                if msg is not None:
+                    targeted_node_id_of_packet = utils.bytes_to_number(
+                        msg.data[1:3])
+                    # check if the received packet is from the headstation that registered the actor
+                    if msg.data[0] == config.ACTOR_REGISTER_ACK and targeted_node_id_of_packet == self.node_id and msg.data[3]==actor.actor_slot:
+                        print("[ {node} ] actor registration successful: {actor}".format(
+                            node=self.node_id, actor=actor.actor_slot))
+                        return True  # actor was successfully registered at the headstation
+                            
+        print("[ {node} ] giving up actor registration slot {slot}".format(
+            node=self.node_id, slot=actor.actor_slot))
+        self.actors[actor.actor_slot] = actor # save the actor
+        return False  # return False if the client was not able to register the actor
+
 
     def send_register_sensor_packet(self, sensor: GardenBusSensor, sensor_slot: int, resend_count: int = 6, response_timeout: float = 30):
         arbit_id = 100
@@ -231,11 +261,34 @@ class GardenBusClient():
         # send value response packet
         self.send_packet(arbitration_id=arbit_id, bytes=value_response_bytes)
 
+    def handle_actor_set_packet(self, actor_slot, actor_value):
+        if actor_slot in self.actors:
+            print("[ {node_id} ] got value request for slot {actor_slot}".format(
+                node_id=self.node_id, actor_slot=actor_slot,
+            ))
+            arbit_id = 100
+            self.actors[actor_slot].set_value(actor_value)
+            actor_set_ack_bytes = [
+                config.ACTOR_SET_ACK,
+                *utils.number_to_bytes(self.node_id, 2),
+                *utils.number_to_bytes(actor_slot),
+                *list(np.float32(actor_value).tobytes())
+            ]
+            print("[ {node_id} ] sending actor set ack for slot {actor_slot}".format(
+                node_id=self.node_id, actor_slot=actor_slot,
+            ))
+            # send value response packet
+            self.send_packet(arbitration_id=arbit_id, bytes=actor_set_ack_bytes)
+
     def register_sensor(self, sensor: GardenBusSensor, slot, resend_count: int = 6, response_timeout: float = 30):
         return self.send_register_sensor_packet(sensor=sensor, sensor_slot=slot, resend_count=resend_count, response_timeout=response_timeout)
 
     def unregister_sensor(self, slot):
         return self.send_unregister_sensor_packet(slot)
+    
+    def register_actor(self, actor: GardenBusActor):
+        return self.send_register_actor_packet(actor)
+
 
     def join_network(self):
         return self.send_entry_packet()
@@ -439,7 +492,13 @@ class GardenBusClient():
                     if transfer_id == self.partial_transfer["transfer_id"]:
                         part_identifier = utils.bytes_to_number(msg.data[2:5])
                         self.handle_partial_transfer_ack(part_identifier)
-
+                
+                elif msg.data[0] == config.ACTOR_SET and utils.bytes_to_number(msg.data[1:3]) == self.node_id:
+                    actor_slot= msg.data[3]
+                    actor_value_bytes = msg.data[4:9]
+                    actor_value = float(
+                            np.frombuffer(actor_value_bytes, dtype=np.float32))
+                    self.handle_actor_set_packet(actor_slot, actor_value)
 
                 #print(str(self.node_id), "received a packet:", msg.data[0])
             if time()-self.last_headstation_alive >= config.HEADSTATION_TICK_RATE and not headstation_timeout_detected:  # if the last alive-packet is more than the tickrate ago
